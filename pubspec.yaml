@@ -1,7 +1,10 @@
 name: online_offline
-description: "A new Flutter package project."
-version: 0.0.1
-homepage:
+description: "A powerful Flutter package for offline-first applications with automatic synchronization, conflict resolution, and connectivity management."
+version: 1.0.0
+homepage: https://github.com/tu-usuario/online_offline
+repository: https://github.com/tu-usuario/online_offline
+issue_tracker: https://github.com/tu-usuario/online_offline/issues
+documentation: https://github.com/tu-usuario/online_offline#readme
 
 environment:
   sdk: ^3.8.1
