@@ -8,11 +8,12 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 ## [1.0.0] - 2025-01-05
 
 ### 🚀 Primera Versión Pública
-- **Nombre del paquete**: `flutter_offline_sync` - Nombre único y descriptivo
+- **Nombre del paquete**: `betuko_offline_sync` - Nombre único con identidad personal
 - **LICENSE**: Archivo de licencia MIT agregado
 - **Validación completa**: Todos los errores de pub.dev resueltos
 - **Documentación**: README completo con ejemplos
 - **Tests**: 47 tests pasando exitosamente
+- **Nombre único**: Garantiza disponibilidad en pub.dev
 
 ### ✨ Agregado
 - **OnlineOfflineManager**: Gestor principal con patrón Singleton

@@ -1,6 +1,6 @@
-# 🌐 Flutter Offline Sync
+# 🌐 Betuko Offline Sync
 
-[![pub package](https://img.shields.io/pub/v/flutter_offline_sync.svg)](https://pub.dev/packages/flutter_offline_sync)
+[![pub package](https://img.shields.io/pub/v/betuko_offline_sync.svg)](https://pub.dev/packages/betuko_offline_sync)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-%2302569B.svg?style=flat&logo=Flutter&logoColor=white)](https://flutter.dev)
 
@@ -19,11 +19,11 @@ Una librería Flutter poderosa para aplicaciones **offline-first** con sincroniz
 
 ## 🚀 Instalación
 
-Agrega `flutter_offline_sync` a tu `pubspec.yaml`:
+Agrega `betuko_offline_sync` a tu `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_offline_sync: ^1.0.2
+  betuko_offline_sync: ^1.0.0
 ```
 
 Luego ejecuta:
@@ -37,7 +37,7 @@ flutter pub get
 ### 1. Inicialización Simple
 
 ```dart
-import 'package:flutter_offline_sync/flutter_offline_sync.dart';
+import 'package:betuko_offline_sync/betuko_offline_sync.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

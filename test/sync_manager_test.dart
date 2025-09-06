@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_offline_sync/flutter_offline_sync.dart';
+import 'package:betuko_offline_sync/betuko_offline_sync.dart';
 
 void main() {
   group('Pruebas de SyncManager con múltiples tablas', () {
