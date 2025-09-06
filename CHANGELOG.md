@@ -5,6 +5,13 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2025-01-05
+
+### 🔧 Corregido
+- **Nombre del paquete**: Cambiado a `flutter_offline_sync` para mejor identificación
+- **Imports en tests**: Corregidos para usar el nuevo nombre del paquete
+- **Validación de pub.dev**: Todos los errores de validación resueltos
+
 ## [1.0.0] - 2025-01-05
 
 ### ✨ Agregado
