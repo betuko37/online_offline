@@ -1,6 +1,6 @@
 name: betuko_offline_sync
 description: "A powerful Flutter package for offline-first applications with automatic synchronization, conflict resolution, and connectivity management."
-version: 1.0.2
+version: 1.0.4
 homepage: https://github.com/betuko37/online_offline
 repository: https://github.com/betuko37/online_offline
 issue_tracker: https://github.com/betuko37/online_offline/issues
@@ -18,6 +18,7 @@ dependencies:
   http: ^1.2.0
   flutter_dotenv: ^5.1.0
   connectivity_plus: ^6.0.5
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
