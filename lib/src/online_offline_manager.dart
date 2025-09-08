@@ -60,6 +60,8 @@ class OnlineOfflineManager {
     this.endpoint,
   }) {
     _initializeServices();
+    // ✅ Inicializar automáticamente
+    initialize();
   }
   
   /// Inicializa servicios internos
@@ -89,10 +91,24 @@ class OnlineOfflineManager {
       await _storage.initialize();
       await _connectivity.initialize();
       
+      // ✅ Cargar datos existentes al inicializar
+      await _loadExistingData();
+      
       _setupStreams();
       _isInitialized = true;
     } catch (e) {
       throw Exception('Error inicializando OnlineOfflineManager: $e');
+    }
+  }
+  
+  /// Carga datos existentes del almacenamiento local
+  Future<void> _loadExistingData() async {
+    try {
+      final allData = await _storage.getAll();
+      _dataController.add(allData);
+      print('✅ Datos cargados al inicializar: ${allData.length} registros');
+    } catch (e) {
+      print('❌ Error cargando datos existentes: $e');
     }
   }
   

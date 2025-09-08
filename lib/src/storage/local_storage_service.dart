@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Variable estática para rastrear si Hive ya está inicializado
 bool _hiveInitialized = false;
@@ -42,8 +43,12 @@ class LocalStorageService {
   /// Asegura que Hive esté inicializado automáticamente
   Future<void> _ensureHiveInitialized() async {
     if (!_hiveInitialized) {
-      // Inicializar Hive automáticamente
-      Hive.init('betuko_offline_sync');
+      // Obtener el directorio de documentos de la aplicación
+      final appDir = await getApplicationDocumentsDirectory();
+      final hivePath = '${appDir.path}/betuko_offline_sync';
+      
+      // Inicializar Hive con la ruta correcta
+      Hive.init(hivePath);
       _hiveInitialized = true;
     }
   }

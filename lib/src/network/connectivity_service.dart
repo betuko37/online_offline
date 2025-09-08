@@ -32,16 +32,22 @@ class ConnectivityService {
       // Verificar conectividad inicial
       await _checkConnectivity();
       
+      // ✅ Emitir estado inicial
+      _connectivityController.add(_isConnected);
+      print('🔍 DEBUG - Estado inicial de conectividad: $_isConnected');
+      
       // Escuchar cambios con manejo de errores
       _connectivity.onConnectivityChanged.listen(
         _onConnectivityChanged,
         onError: (error) {
+          print('❌ Error en conectividad: $error');
           // En caso de error, mantener estado desconectado
           _isConnected = false;
           _connectivityController.add(false);
         },
       );
     } catch (e) {
+      print('❌ Error inicializando conectividad: $e');
       // En caso de error, mantener estado desconectado
       _isConnected = false;
       _connectivityController.add(false);
@@ -62,7 +68,6 @@ class ConnectivityService {
   Future<bool> _checkConnectivity() async {
     try {
       final connectivityResults = await _connectivity.checkConnectivity();
-      final wasConnected = _isConnected;
       
       // Determinar si hay conexión
       _isConnected = connectivityResults.any((result) => 
@@ -72,13 +77,15 @@ class ConnectivityService {
         result == ConnectivityResult.vpn
       );
       
-      // Emitir cambio si hubo cambio de estado
-      if (wasConnected != _isConnected) {
-        _connectivityController.add(_isConnected);
-      }
+      print('🔍 DEBUG - Resultados de conectividad: $connectivityResults');
+      print('🔍 DEBUG - Estado de conexión: $_isConnected');
+      
+      // ✅ Siempre emitir el estado actual
+      _connectivityController.add(_isConnected);
       
       return _isConnected;
     } catch (e) {
+      print('❌ Error verificando conectividad: $e');
       _isConnected = false;
       _connectivityController.add(false);
       return false;
