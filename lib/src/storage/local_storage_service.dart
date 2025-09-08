@@ -43,12 +43,18 @@ class LocalStorageService {
   /// Asegura que Hive esté inicializado automáticamente
   Future<void> _ensureHiveInitialized() async {
     if (!_hiveInitialized) {
-      // Obtener el directorio de documentos de la aplicación
-      final appDir = await getApplicationDocumentsDirectory();
-      final hivePath = '${appDir.path}/betuko_offline_sync';
-      
-      // Inicializar Hive con la ruta correcta
-      Hive.init(hivePath);
+      try {
+        // Obtener el directorio de documentos de la aplicación
+        final appDir = await getApplicationDocumentsDirectory();
+        final hivePath = '${appDir.path}/betuko_offline_sync';
+        
+        // Inicializar Hive con la ruta correcta
+        Hive.init(hivePath);
+      } catch (e) {
+        // Fallback para tests o cuando path_provider no está disponible
+        // Usar un directorio temporal o el directorio actual
+        Hive.init('betuko_offline_sync');
+      }
       _hiveInitialized = true;
     }
   }
