@@ -69,15 +69,29 @@ class ConnectivityService {
     try {
       final connectivityResults = await _connectivity.checkConnectivity();
       
+      // Manejar tipos inconsistentes de connectivity_plus
+      List<ConnectivityResult> results;
+      if (connectivityResults is List) {
+        results = connectivityResults.cast<ConnectivityResult>();
+      } else if (connectivityResults is String) {
+        // Convertir string a ConnectivityResult
+        results = [ConnectivityResult.values.firstWhere(
+          (e) => e.toString().split('.').last == connectivityResults,
+          orElse: () => ConnectivityResult.none,
+        )];
+      } else {
+        results = [ConnectivityResult.none];
+      }
+      
       // Determinar si hay conexión
-      _isConnected = connectivityResults.any((result) => 
+      _isConnected = results.any((result) => 
         result == ConnectivityResult.mobile ||
         result == ConnectivityResult.wifi ||
         result == ConnectivityResult.ethernet ||
         result == ConnectivityResult.vpn
       );
       
-      print('🔍 DEBUG - Resultados de conectividad: $connectivityResults');
+      print('🔍 DEBUG - Resultados de conectividad: $results');
       print('🔍 DEBUG - Estado de conexión: $_isConnected');
       
       // ✅ Siempre emitir el estado actual
@@ -93,8 +107,24 @@ class ConnectivityService {
   }
   
   /// Maneja cambios de conectividad
-  void _onConnectivityChanged(List<ConnectivityResult> results) {
-    _checkConnectivity();
+  void _onConnectivityChanged(dynamic results) {
+    try {
+      // Manejar tipos inconsistentes de connectivity_plus
+      if (results is List) {
+        // Es una lista, verificar conectividad
+        _checkConnectivity();
+      } else if (results is String) {
+        // Es un string, verificar conectividad
+        _checkConnectivity();
+      } else {
+        // Tipo desconocido, verificar conectividad
+        _checkConnectivity();
+      }
+    } catch (e) {
+      print('❌ Error en _onConnectivityChanged: $e');
+      _isConnected = false;
+      _connectivityController.add(false);
+    }
   }
   
   /// Espera a que se establezca conexión
