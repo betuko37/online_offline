@@ -1,271 +1,135 @@
-# 📚 Documentación Completa de la Librería Betuko Offline Sync
+# 📚 Betuko Offline Sync - Documentación Técnica Completa
 
-## 🎯 **Resumen Ejecutivo**
+## 🏗️ Arquitectura Modular
 
-**Betuko Offline Sync** es una librería Flutter profesional para aplicaciones **offline-first** que permite sincronización automática entre almacenamiento local (Hive) y servidor remoto (PostgreSQL). La librería está completamente simplificada, documentada y lista para producción.
+La librería `betuko_offline_sync` está diseñada con una **arquitectura modular** que te permite usar desde el manager completo hasta servicios individuales según tus necesidades.
 
-## 🚀 **Características Principales**
-
-### **✅ Funcionalidades Core:**
-- **🔄 Sincronización Automática** - Entre local y servidor
-- **📱 Offline-First** - Funciona sin internet
-- **🌐 Online Sync** - Sincronización cuando hay conectividad
-- **💾 Almacenamiento Local** - Hive para persistencia
-- **🔐 Autenticación** - Bearer token automático
-- **📡 Conectividad** - Monitoreo en tiempo real
-- **🎯 API Unificada** - Una sola interfaz para todo
-- **📊 Streams Reactivos** - UI en tiempo real
-
-### **✅ Características Técnicas:**
-- **⚡ Alto Rendimiento** - Optimizado para móviles
-- **🛡️ Manejo de Errores** - Robusto y confiable
-- **🧪 Completamente Testeada** - Tests unitarios incluidos
-- **📖 Bien Documentada** - Ejemplos y guías completas
-- **🔧 Fácil de Usar** - API simple e intuitiva
-- **🏗️ Arquitectura Limpia** - Código modular y mantenible
-
-## 📁 **Arquitectura Final Simplificada**
+### 📁 Estructura del Proyecto
 
 ```
-lib/src/
-├── online_offline_manager.dart    # 🎯 Gestor principal
-├── api/
-│   └── api_client.dart           # 🌐 Cliente HTTP
-├── config/
-│   ├── global_config.dart        # ⚙️ Configuración global
-│   └── sync_config.dart         # ⚙️ Configuración de sincronización
-├── sync/
-│   └── sync_service.dart         # 🔄 Servicio de sincronización
-├── storage/
-│   └── local_storage_service.dart # 💾 Almacenamiento local
-├── network/
-│   └── connectivity_service.dart # 📡 Conectividad
-└── examples/
-    ├── main_example.dart         # 📚 Ejemplo principal
-    ├── widget_example.dart       # 📚 Ejemplo de widgets
-    └── README.md                 # 📚 Guía de ejemplos
+lib/
+├── betuko_offline_sync.dart          # Archivo principal con exports
+├── src/
+│   ├── online_offline_manager.dart   # Manager principal simplificado
+│   ├── api/
+│   │   └── api_client.dart           # Cliente HTTP simplificado
+│   ├── storage/
+│   │   └── local_storage.dart        # Almacenamiento local con Hive
+│   ├── sync/
+│   │   └── sync_service.dart         # Servicio de sincronización
+│   ├── connectivity/
+│   │   └── connectivity_service.dart # Servicio de conectividad
+│   ├── config/
+│   │   └── global_config.dart        # Configuración global
+│   └── models/
+│       └── sync_status.dart          # Estados de sincronización
 ```
 
-## 🧩 **Componentes Principales**
+---
 
-### **1️⃣ OnlineOfflineManager** - Gestor Principal
-**Propósito:** API unificada para todas las operaciones offline-first
+## 🎯 OnlineOfflineManager
 
-**Características:**
-- ✅ **CRUD Completo** - Save, get, getAll, delete
-- ✅ **Autosync Integrado** - Sincronización automática
-- ✅ **Streams Reactivos** - Datos, estado, conectividad
-- ✅ **Manejo de Errores** - Robusto y confiable
-- ✅ **Inicialización Automática** - Lazy loading
+El **manager principal** que combina todos los servicios para un uso simplificado.
 
-**Uso básico:**
+### Constructor
+
+```dart
+OnlineOfflineManager({
+  required String boxName,  // Nombre del box de Hive
+  String? endpoint,         // Endpoint opcional del servidor
+})
+```
+
+### Métodos Principales
+
+#### `save(Map<String, dynamic> data)`
+Guarda datos localmente y sincroniza automáticamente si hay conexión.
+
 ```dart
 final manager = OnlineOfflineManager(
-  boxName: 'usuarios',    // Nombre del box local
-  endpoint: 'users',      // Endpoint del servidor
+  boxName: 'usuarios',
+  endpoint: 'users',
 );
 
-await manager.initialize();
-await manager.save('123', {'nombre': 'Juan', 'email': 'juan@ejemplo.com'});
-final allData = await manager.getAll();
+await manager.save({
+  'nombre': 'Juan Pérez',
+  'email': 'juan@ejemplo.com',
+  'edad': 30,
+});
 ```
 
-### **2️⃣ ApiClient** - Cliente HTTP
-**Propósito:** Comunicación HTTP con el servidor
+#### `getAll()`
+Obtiene todos los datos almacenados localmente.
 
-**Características:**
-- ✅ **POST y GET** - Métodos esenciales
-- ✅ **Autenticación Automática** - Bearer token
-- ✅ **Timeouts Configurables** - Manejo de errores
-- ✅ **JSON Automático** - Encoding/decoding
-- ✅ **Headers Personalizados** - Configuración flexible
-
-**Uso independiente:**
 ```dart
-final apiClient = ApiClient();
-final response = await apiClient.get('users');
-if (response.isSuccess) {
-  print('Datos: ${response.data}');
+final datos = await manager.getAll();
+print('Total de registros: ${datos.length}');
+```
+
+#### `getById(String id)`
+Obtiene un registro específico por ID.
+
+```dart
+final usuario = await manager.getById('user_123');
+if (usuario != null) {
+  print('Usuario: ${usuario['nombre']}');
 }
 ```
 
-### **3️⃣ LocalStorageService** - Almacenamiento Local
-**Propósito:** Almacenamiento local con Hive
+#### `delete(String id)`
+Elimina un registro específico.
 
-**Características:**
-- ✅ **CRUD Básico** - Save, get, delete, getAll
-- ✅ **Inicialización Automática** - Lazy loading
-- ✅ **Manejo de Errores** - Try-catch robusto
-- ✅ **Operaciones Batch** - getAll, contains, getSize
-- ✅ **Persistencia** - Datos sobreviven reinicios
-
-**Uso independiente:**
 ```dart
-final storage = LocalStorageService(boxName: 'users');
-await storage.save('123', data);
-final data = await storage.get('123');
+await manager.delete('user_123');
 ```
 
-### **4️⃣ ConnectivityService** - Conectividad
-**Propósito:** Monitoreo de conectividad de red
+#### `sync()`
+Fuerza una sincronización manual con el servidor.
 
-**Características:**
-- ✅ **Monitoreo Básico** - Estado de conexión
-- ✅ **Stream Reactivo** - Cambios en tiempo real
-- ✅ **Verificación Manual** - checkConnectivity()
-- ✅ **Espera de Conexión** - waitForConnection()
-- ✅ **Detección Automática** - Monitoreo continuo
-
-**Uso independiente:**
 ```dart
-final connectivity = ConnectivityService();
-await connectivity.initialize();
-final isConnected = await connectivity.checkConnectivity();
+await manager.sync();
 ```
 
-### **5️⃣ SyncService** - Sincronización
-**Propósito:** Sincronización con servidor
+#### `clear()`
+Limpia todos los datos almacenados.
 
-**Características:**
-- ✅ **Envío de Registros** - sendRecord()
-- ✅ **Obtención de Datos** - getAllRecords()
-- ✅ **Manejo de Errores** - Resultados estructurados
-- ✅ **Formato PostgreSQL** - Array de objetos
-- ✅ **Metadata Automática** - _local_id y _synced_at
-
-**Uso independiente:**
 ```dart
-final syncService = SyncService(config: config);
-final result = await syncService.sendRecord('users', record: data);
+await manager.clear();
 ```
 
-## ⚙️ **Configuración Global**
+#### `getPending()`
+Obtiene solo los registros pendientes de sincronizar.
 
-### **GlobalConfig** - Configuración Centralizada
-**Propósito:** Configuración global de baseUrl y token
-
-**Uso en main():**
 ```dart
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Configuración global - Solo se hace una vez
-  GlobalConfig.init(
-    baseUrl: 'https://tu-api.com/api',
-    token: 'tu_token_de_autenticacion',
-  );
-  
-  runApp(MyApp());
-}
+final pendientes = await manager.getPending();
+print('Registros pendientes: ${pendientes.length}');
 ```
 
-**Beneficios:**
-- ✅ **Una sola configuración** - No repetir en cada manager
-- ✅ **Automático** - Los managers usan la configuración global
-- ✅ **Centralizado** - Fácil de cambiar y mantener
-- ✅ **Seguro** - Token centralizado y protegido
+#### `getSynced()`
+Obtiene solo los registros ya sincronizados.
 
-## 🎯 **Casos de Uso Ideales**
-
-### **📱 Aplicaciones de Campo:**
-- **Agricultura** - Registro de cultivos y cosechas
-- **Ventas** - CRM móvil para vendedores
-- **Inventario** - Gestión de stock en almacenes
-- **Médicas** - Registro de pacientes y consultas
-
-### **🏢 Aplicaciones Empresariales:**
-- **CRM** - Gestión de clientes
-- **ERP** - Planificación de recursos
-- **Inventario** - Control de stock
-- **Ventas** - Gestión de pedidos
-
-### **📊 Aplicaciones de Datos:**
-- **Analytics** - Recopilación de datos
-- **Reporting** - Reportes en tiempo real
-- **Dashboard** - Visualización de datos
-- **Monitoring** - Monitoreo de sistemas
-
-## 🚀 **Guía de Uso Rápido**
-
-### **Paso 1: Instalación**
-```yaml
-dependencies:
-  betuko_offline_sync: ^1.0.0
+```dart
+final sincronizados = await manager.getSynced();
+print('Registros sincronizados: ${sincronizados.length}');
 ```
 
-### **Paso 2: Configuración Global**
-```dart
-// En main.dart
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  GlobalConfig.init(
-    baseUrl: 'https://tu-api.com/api',
-    token: 'tu_token_de_autenticacion',
-  );
-  
-  runApp(MyApp());
-}
-```
+### Streams Reactivos
 
-### **Paso 3: Uso en Widgets**
-```dart
-class MyWidget extends StatefulWidget {
-  @override
-  State<MyWidget> createState() => _MyWidgetState();
-}
+#### `dataStream`
+Stream que emite todos los datos cuando cambian.
 
-class _MyWidgetState extends State<MyWidget> {
-  late OnlineOfflineManager _manager;
-  
-  @override
-  void initState() {
-    super.initState();
-    _initializeManager();
-  }
-  
-  void _initializeManager() async {
-    _manager = OnlineOfflineManager(
-      boxName: 'usuarios',
-      endpoint: 'users',
-    );
-    
-    await _manager.initialize();
-  }
-  
-  // Operaciones CRUD
-  Future<void> _saveData() async {
-    await _manager.save('123', {'nombre': 'Juan', 'email': 'juan@ejemplo.com'});
-  }
-  
-  Future<void> _getData() async {
-    final data = await _manager.getAll();
-    print(data);
-  }
-  
-  @override
-  void dispose() {
-    _manager.dispose();
-    super.dispose();
-  }
-}
-```
-
-### **Paso 4: UI Reactiva**
 ```dart
-StreamBuilder<Map<String, dynamic>>(
-  stream: _manager.data,
+StreamBuilder<List<Map<String, dynamic>>>(
+  stream: manager.dataStream,
   builder: (context, snapshot) {
     if (snapshot.hasData) {
-      final usuarios = snapshot.data!;
       return ListView.builder(
-        itemCount: usuarios.length,
+        itemCount: snapshot.data!.length,
         itemBuilder: (context, index) {
-          final userId = usuarios.keys.elementAt(index);
-          final usuario = usuarios[userId];
+          final item = snapshot.data![index];
           return ListTile(
-            title: Text(usuario['nombre']),
-            subtitle: Text(usuario['email']),
+            title: Text(item['nombre'] ?? 'Sin nombre'),
+            subtitle: Text(item['email'] ?? 'Sin email'),
           );
         },
       );
@@ -275,296 +139,669 @@ StreamBuilder<Map<String, dynamic>>(
 )
 ```
 
-## 🔄 **Sincronización Automática**
+#### `statusStream`
+Stream del estado de sincronización.
 
-### **Cuándo se Sincroniza:**
-- ✅ **Al guardar** - `save()` sincroniza automáticamente
-- ✅ **Al obtener datos** - `getAll()` sincroniza si hay internet
-- ✅ **Al eliminar** - `delete()` sincroniza automáticamente
-- ✅ **Al cambiar conectividad** - Sincroniza cuando se detecta internet
-- ✅ **Manualmente** - `sync()` para sincronización forzada
-
-### **Formato de Datos:**
-```json
-// Datos enviados al servidor
-{
-  "nombre": "Juan",
-  "email": "juan@ejemplo.com",
-  "_local_id": "123",
-  "_synced_at": "2024-01-15T10:30:00Z"
-}
-
-// Datos recibidos del servidor
-[
-  {
-    "id": "123",
-    "nombre": "Juan",
-    "email": "juan@ejemplo.com",
-    "_local_id": "123",
-    "_synced_at": "2024-01-15T10:30:00Z"
-  }
-]
+```dart
+StreamBuilder<SyncStatus>(
+  stream: manager.statusStream,
+  builder: (context, snapshot) {
+    switch (snapshot.data) {
+      case SyncStatus.idle:
+        return Icon(Icons.sync, color: Colors.grey);
+      case SyncStatus.syncing:
+        return CircularProgressIndicator();
+      case SyncStatus.success:
+        return Icon(Icons.check_circle, color: Colors.green);
+      case SyncStatus.error:
+        return Icon(Icons.error, color: Colors.red);
+      default:
+        return Container();
+    }
+  },
+)
 ```
 
-## 🏗️ **Implementación Backend**
+#### `connectivityStream`
+Stream del estado de conectividad.
 
-### **Endpoints Requeridos:**
+```dart
+StreamBuilder<bool>(
+  stream: manager.connectivityStream,
+  builder: (context, snapshot) {
+    final isOnline = snapshot.data ?? false;
+    return Container(
+      padding: EdgeInsets.all(8),
+      color: isOnline ? Colors.green : Colors.red,
+      child: Text(
+        isOnline ? 'Conectado' : 'Sin conexión',
+        style: TextStyle(color: Colors.white),
+      ),
+    );
+  },
+)
+```
 
-#### **POST /{endpoint}** - Crear/Actualizar
-```javascript
-// Node.js + Express + Prisma
-app.post('/users', async (req, res) => {
-  try {
-    const { nombre, email, _local_id, _synced_at } = req.body;
+---
+
+## 🗄️ LocalStorage
+
+Servicio de almacenamiento local usando Hive.
+
+### Constructor
+
+```dart
+final storage = LocalStorage(boxName: 'mi_box');
+await storage.initialize();
+```
+
+### Métodos
+
+```dart
+// Guardar datos
+await storage.save('key_1', {'nombre': 'Juan', 'edad': 30});
+
+// Obtener datos
+final datos = await storage.get('key_1');
+
+// Obtener todos
+final todos = await storage.getAll();
+
+// Filtrar datos
+final adultos = await storage.where((item) => item['edad'] > 18);
+
+// Verificar existencia
+final existe = await storage.contains('key_1');
+
+// Contar registros
+final cantidad = await storage.length();
+
+// Eliminar
+await storage.delete('key_1');
+
+// Limpiar todo
+await storage.clear();
+```
+
+---
+
+## 🌐 ApiClient
+
+Cliente HTTP simplificado para comunicación con el servidor.
+
+### Métodos
+
+#### `post(String endpoint, Map<String, dynamic> data)`
+Envía datos al servidor.
+
+```dart
+final client = ApiClient();
+final response = await client.post('users', {
+  'nombre': 'Juan',
+  'email': 'juan@ejemplo.com',
+});
+
+if (response.isSuccess) {
+  print('Datos enviados correctamente');
+  print('Respuesta: ${response.data}');
+} else {
+  print('Error: ${response.error}');
+}
+```
+
+#### `get(String endpoint)`
+Obtiene datos del servidor.
+
+```dart
+final response = await client.get('users');
+
+if (response.isSuccess) {
+  final usuarios = response.data as List;
+  print('Usuarios obtenidos: ${usuarios.length}');
+} else {
+  print('Error: ${response.error}');
+}
+```
+
+### Clase ApiResponse
+
+```dart
+class ApiResponse {
+  final bool isSuccess;      // Si la petición fue exitosa
+  final int statusCode;      // Código de estado HTTP
+  final dynamic data;        // Datos de la respuesta
+  final String? error;       // Mensaje de error si existe
+}
+```
+
+---
+
+## 🔄 SyncService
+
+Servicio de sincronización offline-first.
+
+### Constructor
+
+```dart
+final storage = LocalStorage(boxName: 'datos');
+await storage.initialize();
+
+final syncService = SyncService(
+  storage: storage,
+  endpoint: 'mi-endpoint',
+);
+```
+
+### Métodos
+
+#### `sync()`
+Sincroniza datos con el servidor.
+
+```dart
+await syncService.sync();
+```
+
+### Stream de Estado
+
+```dart
+syncService.statusStream.listen((status) {
+  switch (status) {
+    case SyncStatus.syncing:
+      print('Sincronizando...');
+      break;
+    case SyncStatus.success:
+      print('Sincronización exitosa');
+      break;
+    case SyncStatus.error:
+      print('Error en sincronización');
+      break;
+  }
+});
+```
+
+---
+
+## 📡 ConnectivityService
+
+Servicio de monitoreo de conectividad.
+
+### Uso
+
+```dart
+final connectivity = ConnectivityService();
+await connectivity.initialize();
+
+// Escuchar cambios de conectividad
+connectivity.connectivityStream.listen((isOnline) {
+  if (isOnline) {
+    print('🌐 Conectado a internet');
+    // Ejecutar sincronización
+  } else {
+    print('📱 Sin conexión a internet');
+    // Trabajar en modo offline
+  }
+});
+
+// Verificar estado actual
+if (connectivity.isOnline) {
+  print('Hay conexión');
+} else {
+  print('Sin conexión');
+}
+```
+
+---
+
+## ⚙️ GlobalConfig
+
+Configuración global de la librería.
+
+### Configuración
+
+```dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  GlobalConfig.init(
+    baseUrl: 'https://mi-api.com/api',
+    token: 'mi_token_de_autenticacion',
+  );
+  
+  runApp(MyApp());
+}
+```
+
+### Métodos
+
+```dart
+// Verificar si está inicializado
+if (GlobalConfig.isInitialized) {
+  print('Configuración lista');
+}
+
+// Obtener configuración
+final baseUrl = GlobalConfig.baseUrl;
+final token = GlobalConfig.token;
+
+// Limpiar configuración (útil para tests)
+GlobalConfig.clear();
+```
+
+---
+
+## 🎯 SyncStatus
+
+Enum que define los estados de sincronización.
+
+```dart
+enum SyncStatus {
+  idle,     // Sin actividad
+  syncing,  // Sincronizando
+  success,  // Sincronización exitosa
+  error,    // Error en sincronización
+}
+```
+
+---
+
+## 🧪 Ejemplos Avanzados
+
+### Uso Modular Personalizado
+
+```dart
+class MiServicioPersonalizado {
+  final LocalStorage _storage;
+  final ApiClient _apiClient;
+  final ConnectivityService _connectivity;
+  
+  MiServicioPersonalizado() 
+    : _storage = LocalStorage(boxName: 'mi_servicio'),
+      _apiClient = ApiClient(),
+      _connectivity = ConnectivityService();
+  
+  Future<void> initialize() async {
+    await _storage.initialize();
+    await _connectivity.initialize();
     
-    const user = await prisma.user.upsert({
-      where: { _local_id },
-      update: { nombre, email, _synced_at },
-      create: { nombre, email, _local_id, _synced_at }
+    // Escuchar cambios de conectividad
+    _connectivity.connectivityStream.listen((isOnline) {
+      if (isOnline) {
+        _syncDatosPendientes();
+      }
+    });
+  }
+  
+  Future<void> guardarDato(Map<String, dynamic> dato) async {
+    // Agregar timestamp
+    dato['created_at'] = DateTime.now().toIso8601String();
+    dato['synced'] = false;
+    
+    // Guardar localmente
+    final id = 'item_${DateTime.now().millisecondsSinceEpoch}';
+    await _storage.save(id, dato);
+    
+    // Intentar sincronizar si hay conexión
+    if (_connectivity.isOnline) {
+      await _sincronizarDato(id, dato);
+    }
+  }
+  
+  Future<void> _sincronizarDato(String id, Map<String, dynamic> dato) async {
+    try {
+      final response = await _apiClient.post('mi-endpoint', dato);
+      
+      if (response.isSuccess) {
+        // Marcar como sincronizado
+        dato['synced'] = true;
+        await _storage.save(id, dato);
+      }
+    } catch (e) {
+      print('Error sincronizando: $e');
+    }
+  }
+  
+  Future<void> _syncDatosPendientes() async {
+    final pendientes = await _storage.where((item) => item['synced'] == false);
+    
+    for (final dato in pendientes) {
+      // Encontrar ID del dato
+      final keys = await _storage.getKeys();
+      for (final key in keys) {
+        final item = await _storage.get(key);
+        if (item != null && item['created_at'] == dato['created_at']) {
+          await _sincronizarDato(key, dato);
+          break;
+        }
+      }
+    }
+  }
+}
+```
+
+### Manager con Validación Personalizada
+
+```dart
+class ValidatedManager extends OnlineOfflineManager {
+  ValidatedManager({
+    required String boxName,
+    String? endpoint,
+  }) : super(boxName: boxName, endpoint: endpoint);
+  
+  @override
+  Future<void> save(Map<String, dynamic> data) async {
+    // Validar datos antes de guardar
+    if (!_validarDatos(data)) {
+      throw Exception('Datos inválidos');
+    }
+    
+    // Agregar metadatos
+    data['validated_at'] = DateTime.now().toIso8601String();
+    data['version'] = '1.0';
+    
+    await super.save(data);
+  }
+  
+  bool _validarDatos(Map<String, dynamic> data) {
+    // Validaciones personalizadas
+    if (data['nombre'] == null || data['nombre'].toString().isEmpty) {
+      return false;
+    }
+    
+    if (data['email'] != null) {
+      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+      if (!emailRegex.hasMatch(data['email'])) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+}
+```
+
+---
+
+## 🧪 Testing
+
+### Test del OnlineOfflineManager
+
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:betuko_offline_sync/betuko_offline_sync.dart';
+
+void main() {
+  group('OnlineOfflineManager Tests', () {
+    late OnlineOfflineManager manager;
+    
+    setUp(() {
+      GlobalConfig.init(
+        baseUrl: 'https://test-api.com',
+        token: 'test-token',
+      );
+      
+      manager = OnlineOfflineManager(
+        boxName: 'test_box',
+        endpoint: 'test',
+      );
     });
     
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-```
-
-#### **GET /{endpoint}** - Obtener Todos
-```javascript
-app.get('/users', async (req, res) => {
-  try {
-    const users = await prisma.user.findMany();
-    res.json(users);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-```
-
-### **Modelo Prisma:**
-```prisma
-model User {
-  id        String   @id @default(cuid())
-  nombre    String
-  email     String
-  _local_id String   @unique
-  _synced_at DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+    tearDown(() {
+      manager.dispose();
+      GlobalConfig.clear();
+    });
+    
+    test('debería guardar datos localmente', () async {
+      final testData = {
+        'nombre': 'Test User',
+        'email': 'test@ejemplo.com',
+      };
+      
+      await manager.save(testData);
+      
+      final allData = await manager.getAll();
+      expect(allData.length, 1);
+      expect(allData.first['nombre'], 'Test User');
+    });
+    
+    test('debería filtrar datos pendientes y sincronizados', () async {
+      // Guardar dato sin sincronizar
+      await manager.save({'tipo': 'pendiente'});
+      
+      // Simular dato sincronizado
+      final storage = LocalStorage(boxName: 'test_box');
+      await storage.initialize();
+      await storage.save('synced_1', {
+        'tipo': 'sincronizado',
+        'sync': DateTime.now().toIso8601String(),
+      });
+      
+      final pendientes = await manager.getPending();
+      final sincronizados = await manager.getSynced();
+      
+      expect(pendientes.length, 1);
+      expect(sincronizados.length, 1);
+      expect(pendientes.first['tipo'], 'pendiente');
+      expect(sincronizados.first['tipo'], 'sincronizado');
+    });
+  });
 }
 ```
 
-## 📊 **Streams Reactivos**
+### Test de Servicios Individuales
 
-### **Streams Disponibles:**
-- **`data`** - Datos locales en tiempo real
-- **`status`** - Estado de sincronización
-- **`connectivity`** - Estado de conectividad
-- **`isConnected`** - Boolean de conexión
-
-### **Uso en UI:**
 ```dart
-// Datos en tiempo real
-StreamBuilder<Map<String, dynamic>>(
-  stream: _manager.data,
-  builder: (context, snapshot) {
-    // UI reactiva
-  },
-)
+import 'package:flutter_test/flutter_test.dart';
+import 'package:betuko_offline_sync/betuko_offline_sync.dart';
 
-// Estado de sincronización
-StreamBuilder<SyncStatus>(
-  stream: _manager.status,
-  builder: (context, snapshot) {
-    // Indicadores de estado
-  },
-)
-
-// Conectividad
-StreamBuilder<bool>(
-  stream: _manager.connectivity,
-  builder: (context, snapshot) {
-    // Indicadores de red
-  },
-)
+void main() {
+  group('LocalStorage Tests', () {
+    late LocalStorage storage;
+    
+    setUp(() async {
+      storage = LocalStorage(boxName: 'test_storage');
+      await storage.initialize();
+    });
+    
+    tearDown(() async {
+      await storage.clear();
+      await storage.close();
+    });
+    
+    test('debería guardar y recuperar datos', () async {
+      final testData = {'key': 'value', 'number': 42};
+      
+      await storage.save('test_key', testData);
+      final retrieved = await storage.get('test_key');
+      
+      expect(retrieved, equals(testData));
+    });
+    
+    test('debería filtrar datos correctamente', () async {
+      await storage.save('item1', {'edad': 25, 'activo': true});
+      await storage.save('item2', {'edad': 17, 'activo': true});
+      await storage.save('item3', {'edad': 30, 'activo': false});
+      
+      final adultos = await storage.where((item) => item['edad'] >= 18);
+      final activos = await storage.where((item) => item['activo'] == true);
+      
+      expect(adultos.length, 2);
+      expect(activos.length, 2);
+    });
+  });
+}
 ```
 
-## 🧪 **Testing**
+---
 
-### **Tests Incluidos:**
-- ✅ **online_offline_manager_test.dart** - Tests para funcionalidad básica
-- ✅ **global_config_test.dart** - Tests para configuración global
-- ✅ **unit_tests.dart** - Tests para clases de configuración
+## 🚨 Manejo de Errores
 
-### **Ejecutar Tests:**
-```bash
-flutter test test/unit_tests.dart
-```
+### Errores Comunes y Soluciones
 
-### **Cobertura de Tests:**
-- ✅ **Constructor y configuración** - Inicialización correcta
-- ✅ **Operaciones CRUD** - Save, get, getAll, delete
-- ✅ **Streams reactivos** - Datos en tiempo real
-- ✅ **Sincronización** - Manual y automática
-- ✅ **Manejo de errores** - Casos edge
-- ✅ **Dispose** - Liberación de recursos
-
-## 📚 **Ejemplos Completos**
-
-### **1️⃣ main_example.dart** - Configuración Global
-**Propósito:** Mostrar cómo configurar la librería en `main()`
-
-**Características:**
-- ✅ **Configuración visual** - Estado de la configuración global
-- ✅ **Información clara** - Explica cómo funciona `GlobalConfig.init()`
-- ✅ **Navegación simple** - Botón para ir al ejemplo de widgets
-- ✅ **Diseño limpio** - Cards con colores para mejor visualización
-
-### **2️⃣ widget_example.dart** - Widgets Básicos
-**Propósito:** Mostrar cómo usar la librería en widgets reales
-
-**Características:**
-- ✅ **Formulario completo** - Campos para nombre, email y teléfono
-- ✅ **Lista reactiva** - Se actualiza automáticamente con `StreamBuilder`
-- ✅ **Operaciones CRUD** - Agregar, editar, eliminar usuarios
-- ✅ **Estados de carga** - Indicadores visuales durante operaciones
-- ✅ **Manejo de errores** - SnackBars informativos
-- ✅ **Sincronización manual** - Botón para sincronizar con servidor
-- ✅ **Información del manager** - Diálogo con detalles del estado
-
-## 🎯 **Ventajas de la Arquitectura Simplificada**
-
-### **🔧 Para Desarrolladores:**
-- ✅ **Más simple** - Menos archivos, menos complejidad
-- ✅ **Más fácil de entender** - Estructura clara
-- ✅ **Más fácil de usar** - API unificada
-- ✅ **Más fácil de mantener** - Menos código
-- ✅ **Más fácil de debuggear** - Menos componentes
-
-### **🏗️ Para Arquitectos:**
-- ✅ **Menos abstracciones** - Solo lo necesario
-- ✅ **Responsabilidades claras** - Cada servicio tiene un propósito
-- ✅ **Menos dependencias** - Componentes independientes
-- ✅ **Más testeable** - Servicios simples
-- ✅ **Más escalable** - Fácil agregar funcionalidades
-
-### **📈 Para el Proyecto:**
-- ✅ **Menos código** - Reducción del 60% en archivos
-- ✅ **Menos complejidad** - Arquitectura más simple
-- ✅ **Mejor rendimiento** - Menos overhead
-- ✅ **Mejor mantenibilidad** - Código más limpio
-- ✅ **Mejor documentación** - Menos que documentar
-
-## 📊 **Comparación de Arquitecturas**
-
-| Aspecto | Antes (Complejo) | Después (Simplificado) |
-|---------|------------------|------------------------|
-| **Archivos** | 15 archivos | 6 archivos |
-| **Servicios** | 6 servicios | 4 servicios |
-| **Líneas de código** | ~2000 líneas | ~800 líneas |
-| **Complejidad** | Alta | Baja |
-| **Facilidad de uso** | Media | Alta |
-| **Mantenibilidad** | Media | Alta |
-| **Testabilidad** | Media | Alta |
-| **Documentación** | Compleja | Simple |
-
-## 🚀 **Casos de Uso Simplificados**
-
-### **1️⃣ Uso Básico (Recomendado):**
+#### Error: "Base URL no configurada"
 ```dart
-// Solo usar OnlineOfflineManager
-final manager = OnlineOfflineManager(
-  boxName: 'usuarios',
-  endpoint: 'users',
+// ❌ Error
+final client = ApiClient();
+await client.get('users'); // Throws exception
+
+// ✅ Solución
+GlobalConfig.init(
+  baseUrl: 'https://mi-api.com',
+  token: 'mi-token',
 );
-
-await manager.save('123', data);
-final allData = await manager.getAll();
 ```
 
-### **2️⃣ Uso Avanzado (Servicios individuales):**
+#### Error: "Box no inicializado"
 ```dart
-// Usar servicios específicos cuando sea necesario
-final apiClient = ApiClient();
-final storage = LocalStorageService(boxName: 'users');
-final connectivity = ConnectivityService();
-final syncService = SyncService(config: config);
+// ❌ Error
+final storage = LocalStorage(boxName: 'mi_box');
+await storage.save('key', data); // Throws exception
 
-// Usar servicios independientemente
-final response = await apiClient.get('users');
-await storage.save('123', data);
+// ✅ Solución
+final storage = LocalStorage(boxName: 'mi_box');
+await storage.initialize();
+await storage.save('key', data);
 ```
 
-### **3️⃣ Uso Híbrido (Combinado):**
+#### Manejo de Errores de Sincronización
 ```dart
-// Usar OnlineOfflineManager como principal
-// y servicios individuales para casos específicos
-final manager = OnlineOfflineManager(boxName: 'users', endpoint: 'users');
-final apiClient = ApiClient(); // Para operaciones especiales
-
-await manager.save('123', data); // Operación normal
-final response = await apiClient.get('special-endpoint'); // Operación especial
+manager.statusStream.listen((status) {
+  if (status == SyncStatus.error) {
+    // Mostrar mensaje de error al usuario
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error en sincronización. Los datos se guardarán localmente.'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+  }
+});
 ```
 
-## 📝 **Archivos Finales**
+---
 
-### **Servicios Principales:**
-- `online_offline_manager.dart` - Gestor principal simplificado
-- `api_client.dart` - Cliente HTTP simplificado
-- `local_storage_service.dart` - Almacenamiento simplificado
-- `connectivity_service.dart` - Conectividad simplificada
-- `sync_service.dart` - Sincronización simplificada
+## ⚡ Mejores Prácticas
 
-### **Configuración:**
-- `global_config.dart` - Configuración global
-- `sync_config.dart` - Configuración de sincronización
+### 1. Inicialización Correcta
+```dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Configurar ANTES de crear managers
+  GlobalConfig.init(
+    baseUrl: 'https://mi-api.com/api',
+    token: await obtenerToken(),
+  );
+  
+  runApp(MyApp());
+}
+```
 
-### **Ejemplos:**
-- `main_example.dart` - Ejemplo principal simplificado
-- `widget_example.dart` - Ejemplo de widgets
-- `README.md` - Guía de ejemplos
+### 2. Manejo de Recursos
+```dart
+class MyWidget extends StatefulWidget {
+  @override
+  _MyWidgetState createState() => _MyWidgetState();
+}
 
-## 🎉 **Resultado Final**
+class _MyWidgetState extends State<MyWidget> {
+  late OnlineOfflineManager manager;
+  
+  @override
+  void initState() {
+    super.initState();
+    manager = OnlineOfflineManager(boxName: 'datos', endpoint: 'users');
+  }
+  
+  @override
+  void dispose() {
+    manager.dispose(); // ¡IMPORTANTE! Liberar recursos
+    super.dispose();
+  }
+}
+```
 
-**¡La librería está completamente simplificada, documentada y lista para producción!**
+### 3. Validación de Datos
+```dart
+Future<void> guardarUsuario(Map<String, dynamic> usuario) async {
+  // Validar antes de guardar
+  if (usuario['email'] == null || !esEmailValido(usuario['email'])) {
+    throw Exception('Email inválido');
+  }
+  
+  // Agregar metadatos
+  usuario['created_at'] = DateTime.now().toIso8601String();
+  usuario['app_version'] = await getAppVersion();
+  
+  await manager.save(usuario);
+}
+```
 
-### **✅ Lo que se logró:**
-- ✅ **Reducción del 60%** en archivos y código
-- ✅ **API más simple** - Una sola interfaz principal
-- ✅ **Servicios esenciales** - Solo lo necesario
-- ✅ **Misma funcionalidad** - Sin pérdida de características
-- ✅ **Mejor rendimiento** - Menos overhead
-- ✅ **Más fácil de usar** - API unificada
-- ✅ **Más fácil de mantener** - Código más limpio
-- ✅ **Sin errores de linting** - Código profesional
-- ✅ **Documentación completa** - Ejemplos y guías
-- ✅ **Tests incluidos** - Verificación de funcionalidad
+### 4. Optimización de Sincronización
+```dart
+// Sincronizar solo cuando sea necesario
+connectivity.connectivityStream.listen((isOnline) {
+  if (isOnline) {
+    // Verificar si hay datos pendientes antes de sincronizar
+    manager.getPending().then((pending) {
+      if (pending.isNotEmpty) {
+        manager.sync();
+      }
+    });
+  }
+});
+```
 
-### **🚀 Beneficios inmediatos:**
-- **Para desarrolladores:** API más simple y fácil de usar
-- **Para arquitectos:** Arquitectura más limpia y mantenible
-- **Para el proyecto:** Menos código, mejor rendimiento
-- **Para testing:** Servicios más simples y testeables
-- **Para documentación:** Menos complejidad que explicar
+---
 
-## 📖 **Próximos Pasos**
+## 🔧 Configuración Avanzada
 
-1. **Instalar la librería** - Agregar a pubspec.yaml
-2. **Configurar globalmente** - Usar GlobalConfig.init() en main()
-3. **Implementar en widgets** - Usar OnlineOfflineManager
-4. **Configurar backend** - Implementar endpoints POST/GET
-5. **Probar funcionalidad** - Ejecutar tests incluidos
-6. **Personalizar** - Adaptar a necesidades específicas
+### Variables de Entorno
+```dart
+class AppConfig {
+  static String get baseUrl {
+    return const String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: 'https://api-dev.miapp.com',
+    );
+  }
+  
+  static String get apiToken {
+    return const String.fromEnvironment('API_TOKEN');
+  }
+}
 
-## 💡 **Consejos Finales**
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  GlobalConfig.init(
+    baseUrl: AppConfig.baseUrl,
+    token: AppConfig.apiToken,
+  );
+  
+  runApp(MyApp());
+}
+```
 
-- **Empieza simple** - Usa solo `OnlineOfflineManager` al principio
-- **Configura globalmente** - Usa `GlobalConfig.init()` en `main()`
-- **Maneja errores** - Siempre usa try-catch en operaciones async
-- **Libera recursos** - Llama `dispose()` cuando termines
-- **Usa streams** - Aprovecha los `StreamBuilder` para UI reactiva
-- **Prueba offline** - Verifica que funciona sin internet
-- **Sincroniza manualmente** - Usa `sync()` cuando sea necesario
+### Configuración por Entorno
+```dart
+enum Environment { development, staging, production }
 
-**¡La librería está lista para usar y crear aplicaciones offline-first profesionales!** 🚀
+class EnvironmentConfig {
+  static const environment = Environment.development;
+  
+  static String get baseUrl {
+    switch (environment) {
+      case Environment.development:
+        return 'https://dev-api.miapp.com';
+      case Environment.staging:
+        return 'https://staging-api.miapp.com';
+      case Environment.production:
+        return 'https://api.miapp.com';
+    }
+  }
+}
+```
+
+---
+
+Esta documentación cubre todos los aspectos técnicos de la librería `betuko_offline_sync`. Para ejemplos específicos o casos de uso avanzados, consulta la documentación del repositorio o contacta al equipo de soporte.

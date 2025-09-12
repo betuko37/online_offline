@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-%2302569B.svg?style=flat&logo=Flutter&logoColor=white)](https://flutter.dev)
 
-**La librería Flutter más simple para apps que funcionan offline y se sincronizan automáticamente.**
+**La librería Flutter más simple y modular para apps que funcionan offline y se sincronizan automáticamente.**
 
 ## 🎯 ¿Qué Hace?
 
@@ -14,11 +14,14 @@ Resuelve el problema más común en apps móviles: **¿Qué pasa cuando no hay i
 - Tu app se rompe sin internet
 - Los usuarios pierden datos
 - Necesitas programar sincronización manual
+- Código complejo y difícil de mantener
 
 ### ✅ **Con Esta Librería:**
 - Tu app **siempre funciona**, con o sin internet
 - Los datos se **sincronizan automáticamente**
-- **Cero configuración** - solo usas la librería
+- **Arquitectura modular** - usa solo lo que necesitas
+- **Cero configuración** para uso básico
+- **Alta personalización** para casos avanzados
 
 ## 🚀 Instalación
 
@@ -31,9 +34,9 @@ dependencies:
 flutter pub get
 ```
 
-## ⚙️ Configuración (Solo Una Vez)
+## 🎯 Uso Rápido (3 Líneas)
 
-### En tu main.dart
+### 1. Configuración Global (Una Vez)
 ```dart
 import 'package:betuko_offline_sync/betuko_offline_sync.dart';
 
@@ -50,8 +53,7 @@ void main() async {
 }
 ```
 
-## 🎯 Uso Básico (3 Líneas)
-
+### 2. Uso Básico con OnlineOfflineManager
 ```dart
 class MiWidget extends StatefulWidget {
   @override
@@ -80,9 +82,34 @@ class _MiWidgetState extends State<MiWidget> {
     };
 
     // 🎯 LÍNEA 3: Guardar (funciona offline y online)
-    await manager.save('123', usuarioData);
+    await manager.save(usuarioData);
     
     // ✅ ¡Listo! Se guarda localmente y sincroniza automáticamente
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: manager.dataStream,  // ✅ Stream automático de datos
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          final usuarios = snapshot.data!;
+          
+          return ListView.builder(
+            itemCount: usuarios.length,
+            itemBuilder: (context, index) {
+              final usuario = usuarios[index];
+              return ListTile(
+                title: Text(usuario['nombre'] ?? 'Sin nombre'),
+                subtitle: Text(usuario['email'] ?? 'Sin email'),
+              );
+            },
+          );
+        }
+        
+        return CircularProgressIndicator();
+      },
+    );
   }
 
   @override
@@ -93,54 +120,71 @@ class _MiWidgetState extends State<MiWidget> {
 }
 ```
 
-## 📊 Mostrar Datos (UI Reactiva)
+## 🏗️ Arquitectura Modular
 
+La librería está diseñada con **arquitectura modular**. Puedes usar el manager completo o solo los servicios que necesites:
+
+### 📦 **OnlineOfflineManager** (Uso Simple)
 ```dart
-@override
-Widget build(BuildContext context) {
-  return StreamBuilder<Map<String, dynamic>>(
-    stream: manager.data,  // ✅ Stream automático de datos
-    builder: (context, snapshot) {
-      if (snapshot.hasData) {
-        final usuarios = snapshot.data!;
-        
-        return ListView.builder(
-          itemCount: usuarios.length,
-          itemBuilder: (context, index) {
-            final usuario = usuarios[index.toString()];
-            return ListTile(
-              title: Text(usuario['nombre'] ?? 'Sin nombre'),
-              subtitle: Text(usuario['email'] ?? 'Sin email'),
-            );
-          },
-        );
-      }
-      
-      return CircularProgressIndicator();
-    },
-  );
-}
+// Todo incluido - perfecto para comenzar
+final manager = OnlineOfflineManager(
+  boxName: 'datos',
+  endpoint: 'mi-endpoint',
+);
 ```
 
-## 🔄 ¿Cómo Funciona?
-
-### **Sincronización Automática**
+### 🧩 **Servicios Individuales** (Uso Avanzado)
 ```dart
-// ✅ La librería sincroniza automáticamente cuando:
-// 1. Guardas datos (save)
-// 2. Obtienes datos (getAll)
-// 3. Eliminas datos (delete)
-// 4. Se detecta internet
-// 5. Se inicia la app (si hay datos pendientes)
+// Almacenamiento local
+final storage = LocalStorage(boxName: 'mi_box');
+await storage.initialize();
+
+// Cliente HTTP
+final apiClient = ApiClient();
+
+// Servicio de sincronización
+final syncService = SyncService(
+  storage: storage,
+  endpoint: 'mi-endpoint',
+);
+
+// Servicio de conectividad
+final connectivity = ConnectivityService();
+await connectivity.initialize();
 ```
 
-### **Flujo de Sincronización**
+## 📊 Streams Reactivos
+
+### **Estado de Sincronización**
+```dart
+StreamBuilder<SyncStatus>(
+  stream: manager.statusStream,
+  builder: (context, snapshot) {
+    switch (snapshot.data) {
+      case SyncStatus.syncing:
+        return CircularProgressIndicator();
+      case SyncStatus.success:
+        return Icon(Icons.check_circle, color: Colors.green);
+      case SyncStatus.error:
+        return Icon(Icons.error, color: Colors.red);
+      default:
+        return Icon(Icons.sync);
+    }
+  },
+)
 ```
-1. Usuario guarda datos → Se guardan localmente
-2. Se detecta internet → Sincronización automática
-3. Datos se envían al servidor → Se confirma recepción
-4. UI se actualiza → Usuario ve cambios
-5. Si falla → Se reintenta automáticamente
+
+### **Estado de Conectividad**
+```dart
+StreamBuilder<bool>(
+  stream: manager.connectivityStream,
+  builder: (context, snapshot) {
+    if (snapshot.data == true) {
+      return Text('🌐 Conectado', style: TextStyle(color: Colors.green));
+    }
+    return Text('📱 Sin conexión', style: TextStyle(color: Colors.red));
+  },
+)
 ```
 
 ## 🗄️ Configuración del Backend
@@ -174,86 +218,18 @@ Content-Type: application/json
 **Payload que envía la librería:**
 ```json
 {
-  "id": "1234567890",
   "nombre": "Juan Pérez",
   "email": "juan@ejemplo.com",
-  "_local_id": "1234567890",
-  "_synced_at": "2024-01-15T10:30:00Z"
+  "created_at": "2024-01-15T10:30:00Z"
 }
 ```
 
-### **Implementación en Node.js + Prisma**
-```typescript
-// GET /api/users
-app.get('/api/users', async (req, res) => {
-  try {
-    const usuarios = await prisma.user.findMany({
-      where: { activo: true }
-    });
-    res.json(usuarios);
-  } catch (error) {
-    res.status(500).json({ error: 'Error obteniendo usuarios' });
-  }
-});
+## 📚 Documentación Completa
 
-// POST /api/users
-app.post('/api/users', async (req, res) => {
-  try {
-    const { _local_id, _synced_at, ...userData } = req.body;
-    
-    // Upsert en PostgreSQL
-    const usuario = await prisma.user.upsert({
-      where: { id: userData.id },
-      update: {
-        ...userData,
-        syncedAt: _synced_at ? new Date(_synced_at) : new Date(),
-      },
-      create: {
-        ...userData,
-        syncedAt: _synced_at ? new Date(_synced_at) : new Date(),
-      }
-    });
-    
-    res.json(usuario);
-  } catch (error) {
-    res.status(500).json({ error: 'Error sincronizando usuario' });
-  }
-});
-```
-
-## 📊 Streams Reactivos
-
-### **Estado de Sincronización**
-```dart
-StreamBuilder<SyncStatus>(
-  stream: manager.status,
-  builder: (context, snapshot) {
-    switch (snapshot.data) {
-      case SyncStatus.syncing:
-        return CircularProgressIndicator();
-      case SyncStatus.success:
-        return Icon(Icons.check_circle, color: Colors.green);
-      case SyncStatus.error:
-        return Icon(Icons.error, color: Colors.red);
-      default:
-        return Icon(Icons.sync);
-    }
-  },
-)
-```
-
-### **Estado de Conectividad**
-```dart
-StreamBuilder<bool>(
-  stream: manager.connectivity,
-  builder: (context, snapshot) {
-    if (snapshot.data == true) {
-      return Text('Conectado', style: TextStyle(color: Colors.green));
-    }
-    return Text('Sin conexión', style: TextStyle(color: Colors.red));
-  },
-)
-```
+- 📖 **[Documentación Técnica Completa](lib/COMPLETE_DOCUMENTATION.md)** - Guía detallada de todos los servicios
+- 🏗️ **[Guía de Arquitectura](docs/ARCHITECTURE.md)** - Entender la estructura modular
+- 🔄 **[Guía de Migración](docs/MIGRATION.md)** - Migrar desde versiones anteriores
+- 🧪 **[Ejemplos Avanzados](examples/)** - Casos de uso complejos
 
 ## 🧪 Testing
 
@@ -270,51 +246,42 @@ test('debería guardar datos localmente', () async {
   );
   
   final testData = {
-    'id': '123',
     'nombre': 'Juan',
     'email': 'juan@ejemplo.com'
   };
 
-  await manager.save('123', testData);
+  await manager.save(testData);
   
-  final savedData = await manager.get('123');
-  expect(savedData, testData);
+  final allData = await manager.getAll();
+  expect(allData.length, 1);
+  expect(allData.first['nombre'], 'Juan');
   
-  await manager.dispose();
+  manager.dispose();
 });
 ```
 
-## 📚 API Reference
+## 📚 API Reference Rápida
 
 ### **OnlineOfflineManager**
+- `save(data)` - Guarda datos localmente y sincroniza
+- `getAll()` - Obtiene todos los datos
+- `getById(id)` - Obtiene datos por ID
+- `delete(id)` - Elimina datos
+- `sync()` - Sincronización manual
+- `clear()` - Limpia todos los datos
+- `getPending()` - Obtiene datos pendientes de sincronizar
+- `getSynced()` - Obtiene datos ya sincronizados
 
-#### **Constructor**
-```dart
-OnlineOfflineManager({
-  required String boxName,    // Nombre de tu tabla local
-  String? endpoint,           // Endpoint de tu API
-})
-```
+### **Streams**
+- `dataStream` - Stream de todos los datos
+- `statusStream` - Stream del estado de sincronización
+- `connectivityStream` - Stream del estado de conectividad
 
-#### **Métodos Principales**
-- `Future<void> save(String key, dynamic value)` - Guarda datos
-- `Future<dynamic> get(String key)` - Obtiene datos por clave
-- `Future<Map<String, dynamic>> getAll()` - Obtiene todos los datos
-- `Future<void> delete(String key)` - Elimina datos
-- `Future<void> sync()` - Sincronización manual
-
-#### **Streams**
-- `Stream<SyncStatus> status` - Estado de sincronización
-- `Stream<bool> connectivity` - Estado de conectividad
-- `Stream<Map<String, dynamic>> data` - Datos almacenados
-
-### **GlobalConfig**
-
-#### **Métodos**
-- `void init({required String baseUrl, required String token})` - Inicializar configuración
-- `String? get baseUrl` - Obtener URL base
-- `String? get token` - Obtener token
-- `bool get isInitialized` - Verificar si está inicializado
+### **Servicios Modulares**
+- `LocalStorage` - Almacenamiento local con Hive
+- `ApiClient` - Cliente HTTP simplificado
+- `SyncService` - Servicio de sincronización
+- `ConnectivityService` - Servicio de conectividad
 
 ## 🎯 Casos de Uso
 
@@ -322,6 +289,29 @@ OnlineOfflineManager({
 - **Apps Empresariales** - CRM, inventarios, gestión de empleados
 - **Apps Médicas** - Consultas, expedientes, datos críticos
 - **Apps de Ventas** - E-commerce, catálogos offline
+- **Apps de Encuestas** - Recolección de datos en áreas remotas
+
+## 🔧 Personalización Avanzada
+
+### **Uso Modular Personalizado**
+```dart
+// Crear tus propios servicios personalizados
+class MiAppService {
+  final LocalStorage _storage;
+  final ApiClient _apiClient;
+  
+  MiAppService() 
+    : _storage = LocalStorage(boxName: 'mi_app'),
+      _apiClient = ApiClient();
+  
+  Future<void> operacionCustom() async {
+    // Tu lógica personalizada
+    final data = await _storage.getAll();
+    final response = await _apiClient.post('custom-endpoint', data.first);
+    // ...
+  }
+}
+```
 
 ## 🤝 Contribuir
 
@@ -344,8 +334,8 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 ## 📞 Soporte
 
 - 📧 Email: soporte@betuko.com
-- 🐛 Issues: [GitHub Issues](https://github.com/betuko/offline_sync/issues)
-- 📖 Documentación: [Wiki](https://github.com/betuko/offline_sync/wiki)
+- 🐛 Issues: [GitHub Issues](https://github.com/betuko37/online_offline/issues)
+- 📖 Documentación: [GitHub Wiki](https://github.com/betuko37/online_offline/wiki)
 
 ---
 
@@ -355,7 +345,9 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 ### ✅ **Beneficios:**
 - **Tu app nunca se rompe** - Funciona offline y online
+- **Arquitectura modular** - Usa solo lo que necesitas
 - **Cero configuración** - Solo 3 líneas para empezar
+- **Alta personalización** - Servicios individuales disponibles
 - **Sincronización automática** - No necesitas programar nada
 - **UI reactiva** - Se actualiza automáticamente
 - **Funciona con cualquier backend** - No necesitas cambiar tu API
@@ -363,5 +355,6 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 ### ✅ **Ahorro de Tiempo:**
 - **Sin librería:** 2-3 semanas programando sincronización
 - **Con librería:** 30 minutos configurando
+- **Arquitectura modular:** Fácil mantenimiento y testing
 
 **¡Empieza ahora y haz tu app offline-first en minutos!** 🚀
