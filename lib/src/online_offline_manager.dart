@@ -1,268 +1,276 @@
 import 'dart:async';
-import 'api/api_client.dart';
-import 'storage/local_storage_service.dart';
-import 'network/connectivity_service.dart';
-import 'sync/sync_service.dart';
-import 'config/sync_config.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'config/global_config.dart';
 
-/// Estados de sincronización
+/// Estados simples para sincronización
 enum SyncStatus { idle, syncing, success, error }
 
-/// Gestor principal simplificado para sistema offline-first
-/// 
-/// Combina todos los servicios necesarios en una interfaz simple:
-/// - Almacenamiento local automático
-/// - Sincronización con servidor
-/// - Detección de conectividad
-/// - Autosync siempre activado
+/// Manager super simple para offline-first
+/// Uso básico: crea, guarda, sincroniza automáticamente
 class OnlineOfflineManager {
-  /// Nombre del box de Hive
   final String boxName;
-  
-  /// Endpoint del servidor
   final String? endpoint;
   
-  /// Servicios internos
-  late final ApiClient _apiClient;
-  late final LocalStorageService _storage;
-  late final ConnectivityService _connectivity;
-  late final SyncService _syncService;
+  Box? _box;
+  bool _isOnline = false;
+  SyncStatus _status = SyncStatus.idle;
   
-  /// Configuración simplificada
-  late final SyncConfig _config;
+  // Streams básicos
+  final _dataStream = StreamController<List<Map<String, dynamic>>>.broadcast();
+  final _statusStream = StreamController<SyncStatus>.broadcast();
   
-  /// Estado de inicialización
-  bool _isInitialized = false;
+  // Getters simples
+  Stream<List<Map<String, dynamic>>> get dataStream => _dataStream.stream;
+  Stream<SyncStatus> get statusStream => _statusStream.stream;
+  SyncStatus get status => _status;
+  bool get isOnline => _isOnline;
   
-  /// Streams reactivos
-  final _statusController = StreamController<SyncStatus>.broadcast();
-  final _connectivityController = StreamController<bool>.broadcast();
-  final _dataController = StreamController<Map<String, dynamic>>.broadcast();
-  
-  /// Streams públicos
-  Stream<SyncStatus> get status => _statusController.stream;
-  Stream<bool> get connectivity => _connectivityController.stream;
-  Stream<Map<String, dynamic>> get data => _dataController.stream;
-  
-  /// Estado actual
-  SyncStatus get currentStatus => _currentStatus;
-  bool get isConnected => _connectivity.isConnected;
-  bool get isInitialized => _isInitialized;
-  
-  SyncStatus _currentStatus = SyncStatus.idle;
-  
-  /// Constructor simplificado
-  /// 
-  /// [boxName] - Nombre del box de Hive
-  /// [endpoint] - Endpoint del servidor (opcional)
   OnlineOfflineManager({
     required this.boxName,
     this.endpoint,
   }) {
-    _initializeServices();
-    // ✅ Inicializar automáticamente
-    initialize();
+    _init();
   }
   
-  /// Inicializa servicios internos
-  void _initializeServices() {
-    _apiClient = ApiClient();
-    _storage = LocalStorageService(boxName: boxName);
-    _connectivity = ConnectivityService();
+  /// Construir URL completa desde configuración global
+  String? get _fullUrl {
+    if (endpoint == null || GlobalConfig.baseUrl == null) return null;
     
-    // Configuración simplificada
-    _config = SyncConfig.simple(
-      boxName: boxName,
-      endpoint: endpoint ?? 'default',
-      enableAutoSync: true,
-    );
+    final baseUrl = GlobalConfig.baseUrl!;
+    final cleanBase = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+    final cleanEndpoint = endpoint!.startsWith('/') ? endpoint!.substring(1) : endpoint!;
     
-    _syncService = SyncService(
-      config: _config,
-      apiClient: _apiClient,
-    );
+    return '$cleanBase$cleanEndpoint';
   }
   
-  /// Inicializa el manager
-  Future<void> initialize() async {
-    if (_isInitialized) return;
+  /// Headers con token automático
+  Map<String, String> get _headers {
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
     
+    if (GlobalConfig.token != null) {
+      headers['Authorization'] = 'Bearer ${GlobalConfig.token}';
+    }
+    
+    return headers;
+  }
+  
+  /// Inicialización simple
+  Future<void> _init() async {
     try {
-      await _storage.initialize();
-      await _connectivity.initialize();
+      // Setup Hive
+      await Hive.initFlutter();
+      _box = await Hive.openBox(boxName);
       
-      // ✅ Cargar datos existentes al inicializar
-      await _loadExistingData();
+      // Setup conectividad
+      Connectivity().onConnectivityChanged.listen((result) {
+        _isOnline = result != ConnectivityResult.none;
+        if (_isOnline && _fullUrl != null) sync();
+      });
       
-      _setupStreams();
-      _isInitialized = true;
+      // Estado inicial
+      final result = await Connectivity().checkConnectivity();
+      _isOnline = result != ConnectivityResult.none;
+      
+      // Cargar datos
+      _notifyData();
+      
     } catch (e) {
-      throw Exception('Error inicializando OnlineOfflineManager: $e');
+      print('❌ Error: $e');
     }
   }
   
-  /// Carga datos existentes del almacenamiento local
-  Future<void> _loadExistingData() async {
-    try {
-      final allData = await _storage.getAll();
-      _dataController.add(allData);
-      print('✅ Datos cargados al inicializar: ${allData.length} registros');
-    } catch (e) {
-      print('❌ Error cargando datos existentes: $e');
-    }
+  /// ===========================================
+  /// OPERACIONES BÁSICAS
+  /// ===========================================
+  
+  /// Crear/guardar datos
+  Future<void> save(Map<String, dynamic> data) async {
+    final id = 'local_${DateTime.now().millisecondsSinceEpoch}';
+    data['created_at'] = DateTime.now().toIso8601String();
+    
+    await _box!.put(id, data);
+    _notifyData();
+    
+    print('✅ Guardado localmente: $id');
+    
+    // Auto-sync si hay internet
+    if (_isOnline && _fullUrl != null) sync();
   }
   
-  /// Configura streams reactivos
-  void _setupStreams() {
-    _connectivity.connectivityStream.listen((connected) {
-      _connectivityController.add(connected);
-      
-      // Autosync cuando se conecte
-      if (connected && endpoint != null) {
-        _performAutoSync();
-      }
-    });
+  /// Obtener por ID
+  Future<Map<String, dynamic>?> getById(String id) async {
+    final data = _box!.get(id);
+    return data != null ? Map<String, dynamic>.from(data) : null;
   }
   
-  /// Guarda datos localmente y sincroniza si hay conexión
-  /// 
-  /// [key] - Clave única
-  /// [data] - Datos a guardar
-  Future<void> save(String key, Map<String, dynamic> data) async {
-    await _ensureInitialized();
+  /// Obtener todos
+  Future<List<Map<String, dynamic>>> getAll() async {
+    return _box!.values
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+  
+  /// Eliminar
+  Future<void> delete(String id) async {
+    await _box!.delete(id);
+    _notifyData();
+  }
+  
+  /// ===========================================
+  /// SINCRONIZACIÓN SIMPLE
+  /// ===========================================
+  
+  /// Sincronizar con servidor
+  Future<void> sync() async {
+    if (_fullUrl == null || !_isOnline) return;
+    
+    _status = SyncStatus.syncing;
+    _statusStream.add(_status);
     
     try {
-      // Guardar localmente
-      await _storage.save(key, data);
+      // 1. Subir pendientes
+      await _uploadPending();
       
-      // Emitir cambio de datos
-      final allData = await _storage.getAll();
-      _dataController.add(allData);
+      // 2. Descargar del servidor
+      await _downloadFromServer();
       
-      // Sincronizar si hay conexión
-      if (isConnected && endpoint != null) {
-        await _syncRecord(key, data);
-      }
+      _status = SyncStatus.success;
+      print('✨ Sync exitoso');
+      
     } catch (e) {
-      throw Exception('Error guardando datos: $e');
-    }
-  }
-  
-  /// Obtiene datos por clave
-  Future<Map<String, dynamic>?> get(String key) async {
-    await _ensureInitialized();
-    return await _storage.get(key);
-  }
-  
-  /// Obtiene todos los datos
-  Future<Map<String, dynamic>> getAll() async {
-    await _ensureInitialized();
-    
-    // Sincronizar si hay conexión
-    if (isConnected && endpoint != null) {
-      await _performAutoSync();
+      _status = SyncStatus.error;
+      print('❌ Error sync: $e');
     }
     
-    return await _storage.getAll();
+    _statusStream.add(_status);
+    _notifyData();
   }
   
-  /// Elimina datos por clave
-  Future<void> delete(String key) async {
-    await _ensureInitialized();
+  /// Subir registros pendientes
+  Future<void> _uploadPending() async {
+    final all = await getAll();
+    // Los registros que no tienen 'sync' son locales pendientes
+    final pending = all.where((item) => !item.containsKey('sync')).toList();
     
-    try {
-      await _storage.delete(key);
-      
-      // Emitir cambio de datos
-      final allData = await _storage.getAll();
-      _dataController.add(allData);
-    } catch (e) {
-      throw Exception('Error eliminando datos: $e');
-    }
-  }
-  
-  /// Sincroniza un registro específico
-  Future<void> _syncRecord(String key, Map<String, dynamic> data) async {
-    try {
-      _currentStatus = SyncStatus.syncing;
-      _statusController.add(SyncStatus.syncing);
-      
-      final record = Map<String, dynamic>.from(data);
-      record['_local_id'] = key;
-      record['_synced_at'] = DateTime.now().toIso8601String();
-      
-      await _syncService.sendRecord(
-        _config.endpoints.first.name,
-        record: record,
-      );
-      
-      _currentStatus = SyncStatus.success;
-      _statusController.add(SyncStatus.success);
-    } catch (e) {
-      _currentStatus = SyncStatus.error;
-      _statusController.add(SyncStatus.error);
-      print('Error sincronizando registro: $e');
-    }
-  }
-  
-  /// Realiza sincronización automática
-  Future<void> _performAutoSync() async {
-    try {
-      _currentStatus = SyncStatus.syncing;
-      _statusController.add(SyncStatus.syncing);
-      
-      final result = await _syncService.getAllRecords(_config.endpoints.first.name);
-      
-      if (result.isSuccess) {
-        final serverData = result.data as Map<String, dynamic>;
+    for (final record in pending) {
+      try {
+        final response = await http.post(
+          Uri.parse(_fullUrl!),
+          headers: _headers,
+          body: jsonEncode(record),
+        ).timeout(const Duration(seconds: 30));
         
-        // Guardar datos del servidor localmente
-        for (final entry in serverData.entries) {
-          await _storage.save(entry.key, entry.value);
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          // Encontrar y eliminar el registro local
+          final keys = _box!.keys.where((key) {
+            final item = _box!.get(key);
+            return item != null && 
+                   item['created_at'] == record['created_at'] &&
+                   !item.containsKey('sync');
+          }).toList();
+          
+          // Eliminar el registro local
+          for (final key in keys) {
+            await _box!.delete(key);
+          }
+          
+          // Agregar como registro sincronizado
+          record['sync'] = DateTime.now().toIso8601String();
+          final syncId = 'synced_${DateTime.now().millisecondsSinceEpoch}';
+          await _box!.put(syncId, record);
+          
+          print('✅ Subido y sincronizado: ${record['created_at']}');
+        }
+      } catch (e) {
+        print('❌ Error subiendo ${record['created_at']}: $e');
+      }
+    }
+  }
+  
+  /// Descargar del servidor
+  Future<void> _downloadFromServer() async {
+    try {
+      final response = await http.get(
+        Uri.parse(_fullUrl!),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 30));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final records = data is List ? data : [data];
+        
+        // Obtener registros locales pendientes antes de limpiar
+        final all = await getAll();
+        final pendingRecords = all.where((item) => !item.containsKey('sync')).toList();
+        
+        // Limpiar solo registros sincronizados
+        await _box!.clear();
+        
+        // Restaurar registros locales pendientes
+        for (int i = 0; i < pendingRecords.length; i++) {
+          final id = 'local_${DateTime.now().millisecondsSinceEpoch}_$i';
+          await _box!.put(id, pendingRecords[i]);
         }
         
-        // Emitir datos actualizados
-        final allData = await _storage.getAll();
-        _dataController.add(allData);
+        // Agregar nuevos registros del servidor
+        for (int i = 0; i < records.length; i++) {
+          final serverRecord = records[i];
+          if (serverRecord is Map<String, dynamic>) {
+            final record = Map<String, dynamic>.from(serverRecord);
+            record['sync'] = DateTime.now().toIso8601String();
+            
+            final id = 'server_${DateTime.now().millisecondsSinceEpoch}_$i';
+            await _box!.put(id, record);
+          }
+        }
         
-        _currentStatus = SyncStatus.success;
-        _statusController.add(SyncStatus.success);
-      } else {
-        throw Exception(result.error);
+        print('✅ Descargados ${records.length} registros del servidor');
+        print('✅ Mantenidos ${pendingRecords.length} registros locales');
       }
     } catch (e) {
-      _currentStatus = SyncStatus.error;
-      _statusController.add(SyncStatus.error);
-      print('Error en sincronización automática: $e');
+      print('❌ Error descargando: $e');
+      rethrow;
     }
   }
   
-  /// Sincroniza manualmente
-  Future<void> sync() async {
-    await _ensureInitialized();
-    await _performAutoSync();
+  /// ===========================================
+  /// UTILIDADES
+  /// ===========================================
+  
+  /// Notificar cambios en datos
+  void _notifyData() async {
+    final data = await getAll();
+    _dataStream.add(data);
   }
   
-  /// Verifica conectividad
-  Future<bool> checkConnectivity() async {
-    return await _connectivity.checkConnectivity();
+  /// Limpiar todo
+  Future<void> clear() async {
+    await _box!.clear();
+    _notifyData();
   }
   
-  /// Asegura que el manager esté inicializado
-  Future<void> _ensureInitialized() async {
-    if (!_isInitialized) {
-      await initialize();
-    }
+  /// Obtener solo pendientes (registros locales sin sincronizar)
+  Future<List<Map<String, dynamic>>> getPending() async {
+    final all = await getAll();
+    return all.where((item) => !item.containsKey('sync')).toList();
   }
   
-  /// Libera recursos
+  /// Obtener solo sincronizados
+  Future<List<Map<String, dynamic>>> getSynced() async {
+    final all = await getAll();
+    return all.where((item) => item.containsKey('sync')).toList();
+  }
+  
+  /// Cerrar recursos
   void dispose() {
-    _storage.dispose();
-    _connectivity.dispose();
-    _apiClient.dispose();
-    
-    _statusController.close();
-    _connectivityController.close();
-    _dataController.close();
+    _dataStream.close();
+    _statusStream.close();
+    _box?.close();
   }
 }

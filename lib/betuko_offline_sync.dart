@@ -11,6 +11,3 @@ export 'src/network/connectivity_service.dart';
 export 'src/config/sync_config.dart';
 export 'src/config/global_config.dart';
 
-// Ejemplos de uso
-export 'src/examples/main_example.dart';
-export 'src/examples/widget_example.dart';
