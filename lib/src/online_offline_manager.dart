@@ -89,8 +89,24 @@ class OnlineOfflineManager {
   /// OPERACIONES BÁSICAS
   /// ===========================================
   
+  /// Asegurar que el box esté abierto
+  Future<void> _ensureBoxOpen() async {
+    if (_box == null || !_box!.isOpen) {
+      try {
+        _box = await Hive.openBox(boxName);
+      } catch (e) {
+        print('❌ Error reabriendo box: $e');
+        // Si hay error, intentar con un nuevo box
+        await Hive.deleteBoxFromDisk(boxName);
+        _box = await Hive.openBox(boxName);
+      }
+    }
+  }
+
   /// Crear/guardar datos
   Future<void> save(Map<String, dynamic> data) async {
+    await _ensureBoxOpen();
+    
     final id = 'local_${DateTime.now().millisecondsSinceEpoch}';
     data['created_at'] = DateTime.now().toIso8601String();
     
@@ -105,12 +121,14 @@ class OnlineOfflineManager {
   
   /// Obtener por ID
   Future<Map<String, dynamic>?> getById(String id) async {
+    await _ensureBoxOpen();
     final data = _box!.get(id);
     return data != null ? Map<String, dynamic>.from(data) : null;
   }
   
   /// Obtener todos
   Future<List<Map<String, dynamic>>> getAll() async {
+    await _ensureBoxOpen();
     return _box!.values
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
@@ -118,6 +136,7 @@ class OnlineOfflineManager {
   
   /// Eliminar
   Future<void> delete(String id) async {
+    await _ensureBoxOpen();
     await _box!.delete(id);
     _notifyData();
   }
@@ -154,6 +173,7 @@ class OnlineOfflineManager {
   
   /// Subir registros pendientes
   Future<void> _uploadPending() async {
+    await _ensureBoxOpen();
     final all = await getAll();
     // Los registros que no tienen 'sync' son locales pendientes
     final pending = all.where((item) => !item.containsKey('sync')).toList();
@@ -195,6 +215,7 @@ class OnlineOfflineManager {
   
   /// Descargar del servidor
   Future<void> _downloadFromServer() async {
+    await _ensureBoxOpen();
     try {
       final response = await http.get(
         Uri.parse(_fullUrl!),
@@ -251,6 +272,7 @@ class OnlineOfflineManager {
   
   /// Limpiar todo
   Future<void> clear() async {
+    await _ensureBoxOpen();
     await _box!.clear();
     _notifyData();
   }
@@ -271,6 +293,8 @@ class OnlineOfflineManager {
   void dispose() {
     _dataStream.close();
     _statusStream.close();
-    _box?.close();
+    if (_box != null && _box!.isOpen) {
+      _box?.close();
+    }
   }
 }
