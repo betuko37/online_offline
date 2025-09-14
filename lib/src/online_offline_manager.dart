@@ -137,7 +137,46 @@ class OnlineOfflineManager {
     await _ensureInitialized();
     return await _storage.getAll();
   }
-  
+
+  /// Obtener datos directamente del servidor (sin cache)
+  Future<List<Map<String, dynamic>>> getFromServer() async {
+    await _ensureInitialized();
+    
+    if (!_connectivity.isOnline) {
+      throw Exception('Sin conexión a internet');
+    }
+    
+    if (endpoint == null) {
+      throw Exception('No hay endpoint configurado');
+    }
+    
+    try {
+      return await _syncService.getDirectFromServer();
+    } catch (e) {
+      print('❌ Error obteniendo datos del servidor: $e');
+      rethrow;
+    }
+  }
+
+  /// Obtener todos con sincronización forzada
+  Future<List<Map<String, dynamic>>> getAllWithSync() async {
+    await _ensureInitialized();
+    
+    try {
+      // Intentar sincronizar primero si hay conexión
+      if (_connectivity.isOnline && endpoint != null) {
+        print('🔄 Sincronizando antes de obtener datos...');
+        await _syncService.sync();
+        print('✅ Sincronización completada');
+      }
+    } catch (e) {
+      print('⚠️ Error en sincronización, usando datos locales: $e');
+    }
+    
+    // Retornar datos locales (que incluirán los sincronizados)
+    return await _storage.getAll();
+  }
+
   /// Eliminar (inicialización automática)
   Future<void> delete(String id) async {
     await _ensureInitialized();

@@ -173,6 +173,43 @@ class SyncService {
     _statusController.add(_status);
   }
 
+  /// Obtiene datos directamente del servidor sin almacenarlos localmente
+  Future<List<Map<String, dynamic>>> getDirectFromServer() async {
+    if (endpoint == null) {
+      throw Exception('No hay endpoint configurado');
+    }
+
+    print('🌐 Consultando servidor directamente...');
+    final response = await _apiClient.get(endpoint!);
+
+    if (!response.isSuccess) {
+      throw Exception('Error HTTP ${response.statusCode}: ${response.error ?? "Error desconocido"}');
+    }
+
+    final data = response.data;
+    if (data == null) {
+      return [];
+    }
+
+    // Convertir la respuesta a una lista de maps
+    if (data is List) {
+      return data.map((item) {
+        if (item is Map<String, dynamic>) {
+          return Map<String, dynamic>.from(item);
+        }
+        return <String, dynamic>{};
+      }).toList();
+    }
+
+    // Si es un objeto único, devolverlo en una lista
+    if (data is Map<String, dynamic>) {
+      return [Map<String, dynamic>.from(data)];
+    }
+
+    print('⚠️ Formato de respuesta no soportado: ${data.runtimeType}');
+    return [];
+  }
+
   /// Libera recursos automáticamente
   void dispose() {
     print('🧹 Limpiando SyncService...');

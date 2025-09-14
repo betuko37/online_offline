@@ -35,6 +35,28 @@ class ApiClient {
     return '$cleanBase$cleanEndpoint';
   }
 
+  /// Extrae datos de respuesta anidada si existe
+  /// Por ejemplo: {data: [...], total: N} -> extrae el array 'data'
+  static dynamic _extractNestedData(dynamic jsonData) {
+    // Si es una respuesta anidada con {data: [...]}
+    if (jsonData is Map<String, dynamic> && jsonData.containsKey('data')) {
+      print('🔍 Detectada respuesta anidada, extrayendo array "data"');
+      
+      // Log de metadatos útiles si existen
+      if (jsonData.containsKey('total')) {
+        print('📊 Total de registros: ${jsonData['total']}');
+      }
+      if (jsonData.containsKey('page')) {
+        print('📄 Página actual: ${jsonData['page']}');
+      }
+      
+      return jsonData['data'];
+    }
+    
+    // Si no es anidada, devolver tal cual
+    return jsonData;
+  }
+
   /// Envía datos al servidor (POST)
   Future<ApiResponse> post(String endpoint, Map<String, dynamic> data) async {
     try {
@@ -46,13 +68,14 @@ class ApiClient {
         body: jsonEncode(data),
       ).timeout(_defaultTimeout);
       
-      return ApiResponse._fromHttpResponse(response);
+      return ApiResponse._fromHttpResponse(response, autoExtractData: false);
     } catch (e) {
       return ApiResponse._error('Error en POST: $e');
     }
   }
 
   /// Obtiene datos del servidor (GET)
+  /// Detecta automáticamente respuestas anidadas {data: [...]}
   Future<ApiResponse> get(String endpoint) async {
     try {
       final url = _buildFullUrl(endpoint);
@@ -62,7 +85,7 @@ class ApiClient {
         headers: _headers,
       ).timeout(_defaultTimeout);
       
-      return ApiResponse._fromHttpResponse(response);
+      return ApiResponse._fromHttpResponse(response, autoExtractData: true);
     } catch (e) {
       return ApiResponse._error('Error en GET: $e');
     }
@@ -70,6 +93,7 @@ class ApiClient {
 }
 
 /// Respuesta del servidor
+/// Ahora con soporte para extracción automática de datos anidados
 class ApiResponse {
   final bool isSuccess;
   final int statusCode;
@@ -84,13 +108,22 @@ class ApiResponse {
   });
 
   /// Constructor desde respuesta HTTP
-  factory ApiResponse._fromHttpResponse(http.Response response) {
+  /// autoExtractData: si es true, intenta extraer automáticamente datos anidados
+  factory ApiResponse._fromHttpResponse(http.Response response, {bool autoExtractData = false}) {
     final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
     
     dynamic data;
     if (response.body.isNotEmpty) {
       try {
-        data = jsonDecode(response.body);
+        // Decodificar JSON
+        final jsonData = jsonDecode(response.body);
+        
+        // Extraer datos anidados si se solicita (principalmente para GET)
+        if (autoExtractData) {
+          data = ApiClient._extractNestedData(jsonData);
+        } else {
+          data = jsonData;
+        }
       } catch (e) {
         data = response.body;
       }
