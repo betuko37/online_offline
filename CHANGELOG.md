@@ -5,6 +5,176 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-09-14
+
+### 🚀 **MAJOR RELEASE - Smart API Response Detection & Enhanced Data Access**
+
+Esta versión introduce **detección automática de respuestas anidadas** y **nuevos métodos de acceso a datos** para una experiencia de desarrollo aún mejor.
+
+### ✨ **Nuevas Características Principales**
+
+#### **🌐 Detección Automática de Respuestas Anidadas**
+- **Detección Inteligente**: Reconoce automáticamente respuestas con formato `{data: [...], total: N}`
+- **Extracción Automática**: Extrae el array `data` sin configuración adicional
+- **Compatibilidad Universal**: Funciona con respuestas simples y anidadas
+- **Logs Informativos**: Muestra metadatos útiles como `total` y `page`
+
+```dart
+// ✨ AHORA FUNCIONA AUTOMÁTICAMENTE
+// Respuesta del servidor: {data: [...], total: 100}
+// getFromServer() retorna directamente: [...]
+final datos = await manager.getFromServer();
+```
+
+#### **🚀 Nuevos Métodos de Acceso a Datos**
+
+##### **`getFromServer()` - Datos Frescos del Servidor**
+```dart
+// Obtiene datos directamente del servidor (requiere internet)
+final datosFrescos = await manager.getFromServer();
+```
+
+##### **`getAllWithSync()` - Sincronización Inteligente**
+```dart
+// Sincroniza primero, luego retorna datos actualizados
+final datosActualizados = await manager.getAllWithSync();
+```
+
+#### **📊 Procesamiento Mejorado de APIs**
+- **Múltiples Formatos**: Soporte para APIs REST estándar
+- **Respuestas Anidadas**: `{data: [...], total: N, page: 1}`
+- **Respuestas Simples**: `[{...}, {...}]`
+- **Objetos Únicos**: `{id: 1, name: "..."}`
+
+### 🔧 **Mejoras Técnicas**
+
+#### **ApiClient Mejorado**
+- **Extracción Automática**: Método `_extractNestedData()` para respuestas anidadas
+- **Mejor Logging**: Información detallada sobre el procesamiento
+- **Manejo de Errores**: Gestión robusta de diferentes formatos de respuesta
+
+#### **SyncService Expandido**
+- **Nuevo Método**: `getDirectFromServer()` para acceso directo al servidor
+- **Mejor Procesamiento**: Manejo inteligente de tipos de datos
+- **Error Handling**: Mensajes de error más descriptivos
+
+### 📚 **Documentación Completa Renovada**
+
+#### **README Completamente Reescrito**
+- **Guía Paso a Paso**: Desde instalación hasta uso avanzado
+- **Ejemplos Reales**: Casos de uso del mundo real
+- **Mejores Prácticas**: Cuándo usar cada método
+- **API Reference**: Documentación completa de todos los métodos
+
+#### **Nuevas Guías**
+- **Guía de Uso**: ¿Cuándo usar `getAll()` vs `getFromServer()` vs `getAllWithSync()`?
+- **Ejemplos Completos**: Lista de tareas, sistema de comentarios
+- **Testing Guide**: Cómo testear tu aplicación
+- **Manejo de Errores**: Estrategias robustas de error handling
+
+### 🎯 **Nuevas Mejores Prácticas**
+
+#### **Estrategia de Carga de Datos**
+```dart
+// 🚀 Carga rápida inicial + sincronización background
+Future<void> _cargarDatos() async {
+  // 1. Cargar datos locales primero (rápido)
+  final datosLocales = await manager.getAll();
+  setState(() { datos = datosLocales; });
+  
+  // 2. Sincronizar en background
+  if (manager.isOnline) {
+    final datosActualizados = await manager.getAllWithSync();
+    setState(() { datos = datosActualizados; });
+  }
+}
+```
+
+#### **Pull to Refresh Optimizado**
+```dart
+// 🔄 Refresh inteligente con datos frescos
+Future<void> _onRefresh() async {
+  try {
+    final datosFrescos = await manager.getFromServer();
+    setState(() { datos = datosFrescos; });
+  } catch (e) {
+    // Mantener datos actuales en caso de error
+    _mostrarError('Error actualizando datos');
+  }
+}
+```
+
+### 🐛 **Correcciones Importantes**
+
+#### **Procesamiento de Respuestas**
+- ✅ **Respuestas Anidadas**: Ahora se procesan correctamente
+- ✅ **Múltiples Formatos**: Soporte universal para diferentes APIs
+- ✅ **Error Handling**: Mejor manejo de respuestas malformadas
+
+#### **Sincronización**
+- ✅ **Sync Automático**: Mejorada la confiabilidad
+- ✅ **Conectividad**: Mejor detección de estado de red
+- ✅ **Data Consistency**: Consistencia mejorada entre local y servidor
+
+### 🔄 **Breaking Changes (Mínimos)**
+
+#### **ApiClient**
+- **GET Requests**: Ahora extraen automáticamente datos anidados
+- **Backward Compatible**: El 99% del código existente sigue funcionando
+- **Migration Path**: Actualización transparente en la mayoría de casos
+
+### ⚡ **Performance**
+
+#### **Optimizaciones**
+- **Carga Más Rápida**: `getAll()` optimizado para UI
+- **Network Efficiency**: Mejor uso de requests de red
+- **Memory Usage**: Gestión de memoria mejorada
+
+### 🧪 **Testing Actualizado**
+
+#### **Nuevos Tests**
+- **Response Processing**: Tests para detección de respuestas anidadas
+- **New Methods**: Cobertura completa de `getFromServer()` y `getAllWithSync()`
+- **Error Scenarios**: Tests robustos de manejo de errores
+
+### 🎉 **Ejemplos de Uso**
+
+#### **Sistema de Tareas Completo**
+```dart
+class TaskManager {
+  static final manager = OnlineOfflineManager(
+    boxName: 'tasks',
+    endpoint: 'tasks',
+  );
+  
+  // Cargar tareas con sincronización inteligente
+  static Future<List<Task>> getTasks() async {
+    final data = await manager.getAllWithSync();
+    return data.map((item) => Task.fromMap(item)).toList();
+  }
+  
+  // Refrescar desde servidor
+  static Future<List<Task>> refreshTasks() async {
+    final data = await manager.getFromServer();
+    return data.map((item) => Task.fromMap(item)).toList();
+  }
+}
+```
+
+### 📈 **Beneficios de la v2.0.0**
+
+#### **Para Desarrolladores**
+- **Menos Código**: Detección automática reduce boilerplate
+- **Más Flexible**: Múltiples estrategias de acceso a datos
+- **Mejor DX**: Documentación completa y ejemplos reales
+
+#### **Para Usuarios Finales**
+- **UI Más Rápida**: Carga inicial optimizada
+- **Mejor Offline**: Sincronización más inteligente
+- **Datos Frescos**: Acceso fácil a datos actualizados del servidor
+
+---
+
 ## [1.1.0] - 2025-09-11
 
 ### 🏗️ REFACTORIZACIÓN MAYOR - ARQUITECTURA MODULAR

@@ -1,12 +1,15 @@
 // ===== GESTOR PRINCIPAL =====
+
 // Manager principal simplificado para uso básico
 export 'src/online_offline_manager.dart';
 
 // ===== CONFIGURACIÓN =====
+
 // Configuración global de la librería
 export 'src/config/global_config.dart';
 
 // ===== SERVICIOS MODULARES =====
+
 // Cliente HTTP para comunicación con el servidor
 export 'src/api/api_client.dart';
 
