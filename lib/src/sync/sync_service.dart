@@ -2,6 +2,8 @@ import 'dart:async';
 import '../api/api_client.dart';
 import '../storage/local_storage.dart';
 import '../models/sync_status.dart';
+import '../config/global_config.dart';
+import '../cache/cache_manager.dart';
 
 /// Servicio de sincronización offline-first con manejo automático
 class SyncService {
@@ -100,51 +102,191 @@ class SyncService {
   /// Descarga datos del servidor con manejo robusto
   Future<void> _downloadFromServer() async {
     try {
-      final response = await _apiClient.get(endpoint!);
-      
-      if (response.isSuccess) {
-        final data = response.data;
-        final records = data is List ? data : [data];
-        
-        // Mantener registros pendientes (que no están sincronizados)
-        await _storage.where((item) => 
-          item['sync'] != 'true' && !item.containsKey('syncDate'));
-        
-        // Limpiar solo registros sincronizados
-        final allData = await _storage.getAll();
-        final keysToDelete = <String>[];
-        final allKeys = await _storage.getKeys();
-        
-        for (int i = 0; i < allData.length; i++) {
-          if (allData[i]['sync'] == 'true' || allData[i].containsKey('syncDate')) {
-            keysToDelete.add(allKeys[i]);
-          }
-        }
-        
-        // Eliminar solo los sincronizados
-        for (final key in keysToDelete) {
-          await _storage.delete(key);
-        }
-        
-        // Agregar datos del servidor como sincronizados
-        for (int i = 0; i < records.length; i++) {
-          final serverRecord = records[i];
-          if (serverRecord is Map<String, dynamic>) {
-            final record = Map<String, dynamic>.from(serverRecord);
-            record['sync'] = 'true';  // String en lugar de bool
-            record['syncDate'] = DateTime.now().toIso8601String();
-            
-            final id = 'server_${DateTime.now().millisecondsSinceEpoch}_$i';
-            await _storage.save(id, record);
-          }
-        }
-        
+      if (GlobalConfig.useIncrementalSync) {
+        await _downloadIncremental();
       } else {
-        throw Exception('Error HTTP: ${response.statusCode}');
+        await _downloadFull();
       }
     } catch (e) {
       rethrow;
     }
+  }
+  
+  /// Descarga completa de datos (comportamiento original)
+  Future<void> _downloadFull() async {
+    final response = await _apiClient.get(endpoint!);
+    
+    if (response.isSuccess) {
+      final data = response.data;
+      final records = data is List ? data : [data];
+      
+      // Mantener registros pendientes (que no están sincronizados)
+      await _storage.where((item) => 
+        item['sync'] != 'true' && !item.containsKey('syncDate'));
+      
+      // Limpiar solo registros sincronizados
+      final allData = await _storage.getAll();
+      final keysToDelete = <String>[];
+      final allKeys = await _storage.getKeys();
+      
+      for (int i = 0; i < allData.length; i++) {
+        if (allData[i]['sync'] == 'true' || allData[i].containsKey('syncDate')) {
+          keysToDelete.add(allKeys[i]);
+        }
+      }
+      
+      // Eliminar solo los sincronizados
+      for (final key in keysToDelete) {
+        await _storage.delete(key);
+      }
+      
+      // Agregar datos del servidor como sincronizados
+      for (int i = 0; i < records.length; i++) {
+        final serverRecord = records[i];
+        if (serverRecord is Map<String, dynamic>) {
+          final record = Map<String, dynamic>.from(serverRecord);
+          record['sync'] = 'true';  // String en lugar de bool
+          record['syncDate'] = DateTime.now().toIso8601String();
+          
+          final id = 'server_${DateTime.now().millisecondsSinceEpoch}_$i';
+          await _storage.save(id, record);
+        }
+      }
+      
+    } else {
+      throw Exception('Error HTTP: ${response.statusCode}');
+    }
+  }
+  
+  /// Descarga incremental de datos (solo nuevos/modificados)
+  Future<void> _downloadIncremental() async {
+    print('🔄 Iniciando sincronización incremental...');
+    
+    // Obtener timestamp de última sincronización
+    final lastSyncTime = await CacheManager.getLastSyncTime(_storage.boxName);
+    final since = lastSyncTime ?? DateTime.now().subtract(const Duration(days: 30));
+    
+    print('📅 Sincronizando desde: $since');
+    
+    int offset = 0;
+    int totalDownloaded = 0;
+    bool hasMoreData = true;
+    DateTime? latestTimestamp;
+    
+    while (hasMoreData) {
+      print('📥 Descargando página ${(offset / GlobalConfig.pageSize).floor() + 1}...');
+      
+      final response = await _apiClient.get(
+        '${endpoint!}?since=${since.toIso8601String()}&limit=${GlobalConfig.pageSize}&offset=$offset&last_modified_field=${GlobalConfig.lastModifiedField}',
+      );
+      
+      if (!response.isSuccess) {
+        throw Exception('Error HTTP en sincronización incremental: ${response.statusCode}');
+      }
+      
+      final data = response.data;
+      final records = data is List ? data : [data];
+      
+      if (records.isEmpty) {
+        hasMoreData = false;
+        break;
+      }
+      
+      // Procesar registros de esta página
+      for (final serverRecord in records) {
+        if (serverRecord is Map<String, dynamic>) {
+          final record = Map<String, dynamic>.from(serverRecord);
+          
+          // Actualizar timestamp más reciente
+          final recordTimestamp = _extractTimestamp(record);
+          if (recordTimestamp != null && 
+              (latestTimestamp == null || recordTimestamp.isAfter(latestTimestamp))) {
+            latestTimestamp = recordTimestamp;
+          }
+          
+          // Buscar si ya existe (por ID o campo único)
+          final existingKey = await _findExistingRecord(record);
+          
+          if (existingKey != null) {
+            // Actualizar registro existente
+            record['sync'] = 'true';
+            record['syncDate'] = DateTime.now().toIso8601String();
+            await _storage.save(existingKey, record);
+            print('🔄 Actualizado registro existente');
+          } else {
+            // Agregar nuevo registro
+            record['sync'] = 'true';
+            record['syncDate'] = DateTime.now().toIso8601String();
+            final id = 'server_${DateTime.now().millisecondsSinceEpoch}_${totalDownloaded}';
+            await _storage.save(id, record);
+            print('➕ Agregado nuevo registro');
+          }
+          
+          totalDownloaded++;
+        }
+      }
+      
+      // Si recibimos menos registros que el límite, no hay más datos
+      if (records.length < GlobalConfig.pageSize) {
+        hasMoreData = false;
+      } else {
+        offset += GlobalConfig.pageSize;
+      }
+      
+      // Límite de seguridad para evitar bucles infinitos
+      if (offset > 10000) {
+        print('⚠️ Límite de seguridad alcanzado en sincronización incremental');
+        hasMoreData = false;
+      }
+    }
+    
+    // Actualizar timestamp de última sincronización
+    if (latestTimestamp != null) {
+      await CacheManager.updateLastSyncTime(_storage.boxName);
+    } else {
+      await CacheManager.updateLastSyncTime(_storage.boxName);
+    }
+    
+    print('✅ Sincronización incremental completada: $totalDownloaded registros procesados');
+  }
+  
+  /// Extrae timestamp de un registro
+  DateTime? _extractTimestamp(Map<String, dynamic> record) {
+    final timestampField = GlobalConfig.lastModifiedField;
+    final timestampValue = record[timestampField];
+    
+    if (timestampValue is String) {
+      try {
+        return DateTime.parse(timestampValue);
+      } catch (e) {
+        return null;
+      }
+    }
+    
+    return null;
+  }
+  
+  /// Busca un registro existente por ID o campo único
+  Future<String?> _findExistingRecord(Map<String, dynamic> record) async {
+    final allKeys = await _storage.getKeys();
+    
+    // Buscar por ID común
+    final possibleIdFields = ['id', 'ID', 'Id', '_id'];
+    for (final idField in possibleIdFields) {
+      if (record.containsKey(idField)) {
+        final recordId = record[idField].toString();
+        for (final key in allKeys) {
+          final existingRecord = await _storage.get(key);
+          if (existingRecord != null && 
+              existingRecord.containsKey(idField) &&
+              existingRecord[idField].toString() == recordId) {
+            return key;
+          }
+        }
+      }
+    }
+    
+    return null;
   }
 
   /// Actualiza el estado de sincronización
