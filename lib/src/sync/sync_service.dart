@@ -40,8 +40,6 @@ class SyncService {
     _updateStatus(SyncStatus.syncing);
 
     try {
-      print('🔄 Iniciando sincronización automática...');
-      
       // 1. Subir datos pendientes
       await _uploadPending();
       
@@ -49,11 +47,10 @@ class SyncService {
       await _downloadFromServer();
       
       _updateStatus(SyncStatus.success);
-      print('✨ Sincronización automática exitosa');
       
     } catch (e) {
       _updateStatus(SyncStatus.error);
-      print('❌ Error en sincronización automática: $e');
+      print('❌ Error en sincronización: $e');
       // No re-lanzar el error para que la app continúe funcionando
     }
   }
@@ -66,11 +63,8 @@ class SyncService {
         item['sync'] != 'true' && !item.containsKey('syncDate'));
       
       if (pending.isEmpty) {
-        print('✅ No hay registros pendientes para subir');
         return;
       }
-      
-      print('📤 Subiendo ${pending.length} registros pendientes...');
       
       for (final record in pending) {
         try {
@@ -89,16 +83,11 @@ class SyncService {
                 record['sync'] = 'true';  // String en lugar de bool
                 record['syncDate'] = DateTime.now().toIso8601String();
                 await _storage.save(key, record);
-                
-                print('✅ Subido: ${record['created_at']}');
                 break;
               }
             }
-          } else {
-            print('❌ Error HTTP subiendo ${record['created_at']}: ${response.statusCode}');
           }
         } catch (e) {
-          print('❌ Error subiendo ${record['created_at']}: $e');
           // Continuar con el siguiente registro
         }
       }
@@ -111,7 +100,6 @@ class SyncService {
   /// Descarga datos del servidor con manejo robusto
   Future<void> _downloadFromServer() async {
     try {
-      print('📥 Descargando datos del servidor...');
       final response = await _apiClient.get(endpoint!);
       
       if (response.isSuccess) {
@@ -119,11 +107,8 @@ class SyncService {
         final records = data is List ? data : [data];
         
         // Mantener registros pendientes (que no están sincronizados)
-        final pending = await _storage.where((item) => 
+        await _storage.where((item) => 
           item['sync'] != 'true' && !item.containsKey('syncDate'));
-        
-        print('📦 Manteniendo ${pending.length} registros pendientes');
-        print('📥 Procesando ${records.length} registros del servidor');
         
         // Limpiar solo registros sincronizados
         final allData = await _storage.getAll();
@@ -154,15 +139,10 @@ class SyncService {
           }
         }
         
-        print('✅ Descargados ${records.length} registros');
-        print('✅ Mantenidos ${pending.length} registros pendientes');
-        
       } else {
-        print('❌ Error HTTP descargando: ${response.statusCode}');
         throw Exception('Error HTTP: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Error descargando: $e');
       rethrow;
     }
   }
@@ -179,7 +159,6 @@ class SyncService {
       throw Exception('No hay endpoint configurado');
     }
 
-    print('🌐 Consultando servidor directamente...');
     final response = await _apiClient.get(endpoint!);
 
     if (!response.isSuccess) {
@@ -206,14 +185,11 @@ class SyncService {
       return [Map<String, dynamic>.from(data)];
     }
 
-    print('⚠️ Formato de respuesta no soportado: ${data.runtimeType}');
     return [];
   }
 
   /// Libera recursos automáticamente
   void dispose() {
-    print('🧹 Limpiando SyncService...');
     _statusController.close();
-    print('✅ SyncService limpiado');
   }
 }

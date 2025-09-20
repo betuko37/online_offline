@@ -25,7 +25,6 @@ class ConnectivityService {
     if (_isInitialized) return;
     
     initialize().catchError((e) {
-      print('❌ Error en auto-inicialización de conectividad: $e');
       // Asumir offline en caso de error
       _isOnline = false;
     });
@@ -44,10 +43,8 @@ class ConnectivityService {
       _subscription = Connectivity().onConnectivityChanged.listen(_updateConnectivity);
       
       _isInitialized = true;
-      print('✅ ConnectivityService inicializado - Estado: ${_isOnline ? "Online" : "Offline"}');
       
     } catch (e) {
-      print('❌ Error inicializando ConnectivityService: $e');
       // En caso de error, asumir offline
       _isOnline = false;
       _isInitialized = true;
@@ -62,16 +59,13 @@ class ConnectivityService {
     // Solo notificar si cambió el estado
     if (wasOnline != _isOnline) {
       _connectivityController.add(_isOnline);
-      print(_isOnline ? '🌐 Conectado a internet' : '📱 Sin conexión a internet');
     }
   }
 
   /// Libera recursos automáticamente
   void dispose() {
-    print('🧹 Limpiando ConnectivityService...');
     _subscription?.cancel();
     _connectivityController.close();
     _isInitialized = false;
-    print('✅ ConnectivityService limpiado');
   }
 }

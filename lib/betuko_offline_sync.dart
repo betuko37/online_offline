@@ -8,6 +8,12 @@ export 'src/online_offline_manager.dart';
 // Configuración global de la librería
 export 'src/config/global_config.dart';
 
+// Configuración de sincronización optimizada
+export 'src/config/sync_config.dart';
+
+// Gestor de caché inteligente
+export 'src/cache/cache_manager.dart';
+
 // ===== SERVICIOS MODULARES =====
 
 // Cliente HTTP para comunicación con el servidor

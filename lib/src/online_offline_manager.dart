@@ -3,12 +3,15 @@ import 'storage/local_storage.dart';
 import 'sync/sync_service.dart';
 import 'connectivity/connectivity_service.dart';
 import 'models/sync_status.dart';
+import 'config/sync_config.dart';
+import 'cache/cache_manager.dart';
 
 /// Manager super simple para offline-first
 /// TODO SE INICIALIZA AUTOMÁTICAMENTE - Solo crear y usar
 class OnlineOfflineManager {
   final String boxName;
   final String? endpoint;
+  final SyncConfig syncConfig;
   
   // Servicios modulares
   late final LocalStorage _storage;
@@ -23,6 +26,9 @@ class OnlineOfflineManager {
   bool _isInitializing = false;
   final Completer<void> _initCompleter = Completer<void>();
   
+  // Timer para sincronización automática
+  Timer? _autoSyncTimer;
+  
   // Getters simples
   Stream<List<Map<String, dynamic>>> get dataStream => _dataController.stream;
   Stream<SyncStatus> get statusStream => _syncService.statusStream;
@@ -34,6 +40,7 @@ class OnlineOfflineManager {
   OnlineOfflineManager({
     required this.boxName,
     this.endpoint,
+    this.syncConfig = SyncConfig.occasional, // Por defecto datos ocasionales
   }) {
     // Inicialización automática en background
     _autoInit();
@@ -47,7 +54,7 @@ class OnlineOfflineManager {
     _init().then((_) {
       _isInitialized = true;
       _initCompleter.complete();
-      print('✅ OnlineOfflineManager "$boxName" listo automáticamente');
+      // Manager inicializado automáticamente
     }).catchError((e) {
       print('❌ Error en inicialización automática: $e');
       _initCompleter.completeError(e);
@@ -77,17 +84,22 @@ class OnlineOfflineManager {
         endpoint: endpoint,
       );
       
-      // Auto-sync inteligente cuando hay conexión
-      _connectivity.connectivityStream.listen((isOnline) async {
-        if (isOnline && endpoint != null) {
-          try {
-            await _syncService.sync();
-            await _notifyData();
-          } catch (e) {
-            print('❌ Error en auto-sync: $e');
+      // Auto-sync inteligente cuando hay conexión (solo si está configurado)
+      if (syncConfig.autoSyncOnConnectivityChange) {
+        _connectivity.connectivityStream.listen((isOnline) async {
+          if (isOnline && endpoint != null) {
+            try {
+              await _smartSync();
+              await _notifyData();
+            } catch (e) {
+              print('❌ Error en auto-sync: $e');
+            }
           }
-        }
-      });
+        });
+      }
+      
+      // Configurar timer de sincronización automática
+      _setupAutoSyncTimer();
       
       // Cargar datos iniciales
       await _notifyData();
@@ -114,11 +126,11 @@ class OnlineOfflineManager {
     await _storage.save(id, data);
     await _notifyData();
     
-    print('✅ Guardado localmente: $id');
+    // Datos guardados localmente
     
-    // Auto-sync inteligente si hay internet
-    if (_connectivity.isOnline && endpoint != null) {
-      _syncService.sync().then((_) {
+    // Auto-sync inteligente si hay internet (solo si está configurado)
+    if (syncConfig.autoSyncOnSave && _connectivity.isOnline && endpoint != null) {
+      _smartSync().then((_) {
         _notifyData();
       }).catchError((e) {
         print('❌ Error en auto-sync: $e');
@@ -158,22 +170,26 @@ class OnlineOfflineManager {
     }
   }
 
-  /// Obtener todos con sincronización forzada
+  /// Obtener todos con sincronización inteligente
   Future<List<Map<String, dynamic>>> getAllWithSync() async {
     await _ensureInitialized();
     
     try {
-      // Intentar sincronizar primero si hay conexión
-      if (_connectivity.isOnline && endpoint != null) {
-        print('🔄 Sincronizando antes de obtener datos...');
-        await _syncService.sync();
-        print('✅ Sincronización completada');
+      // Sincronización inteligente solo si está configurado y es necesario
+      if (syncConfig.autoSyncOnGet && _connectivity.isOnline && endpoint != null) {
+        await _smartSync();
       }
     } catch (e) {
       print('⚠️ Error en sincronización, usando datos locales: $e');
     }
     
     // Retornar datos locales (que incluirán los sincronizados)
+    return await _storage.getAll();
+  }
+  
+  /// Obtener todos sin sincronización automática (más rápido)
+  Future<List<Map<String, dynamic>>> getAllFast() async {
+    await _ensureInitialized();
     return await _storage.getAll();
   }
 
@@ -183,9 +199,9 @@ class OnlineOfflineManager {
     await _storage.delete(id);
     await _notifyData();
     
-    // Auto-sync después de eliminar
-    if (_connectivity.isOnline && endpoint != null) {
-      _syncService.sync().then((_) {
+    // Auto-sync después de eliminar (solo si está configurado)
+    if (syncConfig.autoSyncOnDelete && _connectivity.isOnline && endpoint != null) {
+      _smartSync().then((_) {
         _notifyData();
       }).catchError((e) {
         print('❌ Error en auto-sync: $e');
@@ -197,10 +213,56 @@ class OnlineOfflineManager {
   /// SINCRONIZACIÓN AUTOMÁTICA
   /// ===========================================
   
+  /// Configura el timer de sincronización automática
+  void _setupAutoSyncTimer() {
+    // Cancelar timer anterior si existe
+    _autoSyncTimer?.cancel();
+    
+    // Solo configurar timer si hay endpoint y está configurado para sincronización automática
+    if (endpoint != null && syncConfig.autoSyncOnGet) {
+      _autoSyncTimer = Timer.periodic(syncConfig.maxCacheAge, (timer) async {
+        if (_connectivity.isOnline) {
+          try {
+            await _smartSync();
+            await _notifyData();
+          } catch (e) {
+            print('❌ Error en sincronización por timer: $e');
+          }
+        }
+      });
+    }
+  }
+  
+  /// Sincronización inteligente (solo si es necesario)
+  Future<void> _smartSync() async {
+    if (!syncConfig.useSmartSync) {
+      await _syncService.sync();
+      await CacheManager.updateLastSyncTime(boxName);
+      return;
+    }
+    
+    // Verificar si necesita sincronizar basado en el tiempo transcurrido
+    final shouldSync = await CacheManager.shouldSync(boxName, maxAge: syncConfig.maxCacheAge);
+    
+    if (shouldSync) {
+      await _syncService.sync();
+      await CacheManager.updateLastSyncTime(boxName);
+    }
+  }
+  
   /// Sincronizar con servidor (fuerza sincronización)
   Future<void> sync() async {
     await _ensureInitialized();
     await _syncService.sync();
+    await CacheManager.updateLastSyncTime(boxName);
+    await _notifyData();
+  }
+  
+  /// Sincronización forzada (ignora caché)
+  Future<void> forceSync() async {
+    await _ensureInitialized();
+    await _syncService.sync();
+    await CacheManager.updateLastSyncTime(boxName);
     await _notifyData();
   }
   
@@ -243,11 +305,10 @@ class OnlineOfflineManager {
   
   /// Cerrar recursos automáticamente
   void dispose() {
-    print('🧹 Limpiando recursos automáticamente...');
+    _autoSyncTimer?.cancel();
     _dataController.close();
     _syncService.dispose();
     _connectivity.dispose();
     _storage.dispose();
-    print('✅ Recursos liberados automáticamente');
   }
 }

@@ -18,9 +18,7 @@ class LocalStorage {
     try {
       await Hive.initFlutter();
       _hiveInitialized = true;
-      print('✅ Hive inicializado globalmente');
     } catch (e) {
-      print('❌ Error inicializando Hive: $e');
       rethrow;
     }
   }
@@ -42,18 +40,14 @@ class LocalStorage {
       if (_box == null || !_box!.isOpen) {
         _box = await Hive.openBox(boxName);
         _isInitialized = true;
-        print('✅ Box "$boxName" abierto automáticamente');
       }
     } catch (e) {
-      print('❌ Error abriendo box "$boxName": $e');
       try {
         // Si falla, intentar recrear el box
         await Hive.deleteBoxFromDisk(boxName);
         _box = await Hive.openBox(boxName);
         _isInitialized = true;
-        print('✅ Box "$boxName" recreado exitosamente');
       } catch (recreateError) {
-        print('❌ Error recreando box "$boxName": $recreateError');
         throw Exception('Error crítico inicializando almacenamiento: $recreateError');
       }
     }
