@@ -3,7 +3,6 @@ import 'storage/local_storage.dart';
 import 'sync/sync_service.dart';
 import 'connectivity/connectivity_service.dart';
 import 'models/sync_status.dart';
-import 'config/sync_config.dart';
 import 'config/global_config.dart';
 import 'cache/cache_manager.dart';
 
@@ -12,7 +11,7 @@ import 'cache/cache_manager.dart';
 class OnlineOfflineManager {
   final String boxName;
   final String? endpoint;
-  final SyncConfig syncConfig;
+  final bool enableAutoCleanup; // ← Nueva opción para habilitar limpieza automática
   
   // Servicios modulares
   late final LocalStorage _storage;
@@ -41,7 +40,7 @@ class OnlineOfflineManager {
   OnlineOfflineManager({
     required this.boxName,
     this.endpoint,
-    this.syncConfig = SyncConfig.occasional, // Por defecto datos ocasionales
+    this.enableAutoCleanup = false, // ← Por defecto NO limpiar automáticamente
   }) {
     // Inicialización automática en background
     _autoInit();
@@ -85,8 +84,8 @@ class OnlineOfflineManager {
         endpoint: endpoint,
       );
       
-      // Auto-sync inteligente cuando hay conexión (solo si está configurado)
-      if (syncConfig.autoSyncOnConnectivityChange) {
+      // Auto-sync inteligente cuando hay conexión (siempre habilitado)
+      if (GlobalConfig.syncOnReconnect) {
         bool _wasOffline = false;
         
         _connectivity.connectivityStream.listen((isOnline) async {
@@ -132,6 +131,7 @@ class OnlineOfflineManager {
   /// Este es el método principal. Automáticamente:
   /// - Sincroniza datos pendientes hacia el servidor
   /// - Descarga datos nuevos/modificados del servidor
+  /// - Limita automáticamente los registros locales
   /// - Retorna todos los datos (locales + sincronizados)
   /// - Funciona offline y online
   Future<List<Map<String, dynamic>>> getAll() async {
@@ -144,6 +144,11 @@ class OnlineOfflineManager {
       }
     } catch (e) {
       print('⚠️ Error en sincronización automática, usando datos locales: $e');
+    }
+    
+    // Aplicar limitación automática de registros locales (solo si está habilitada)
+    if (enableAutoCleanup) {
+      await _applyLocalRecordLimit();
     }
     
     // Retornar todos los datos (locales + sincronizados)
@@ -196,9 +201,9 @@ class OnlineOfflineManager {
     // Cancelar timer anterior si existe
     _autoSyncTimer?.cancel();
     
-    // Solo configurar timer si hay endpoint y está configurado para sincronización automática
-    if (endpoint != null && syncConfig.autoSyncOnGet) {
-      _autoSyncTimer = Timer.periodic(syncConfig.maxCacheAge, (timer) async {
+    // Solo configurar timer si hay endpoint (sincronización automática siempre habilitada)
+    if (endpoint != null) {
+      _autoSyncTimer = Timer.periodic(Duration(minutes: GlobalConfig.syncMinutes), (timer) async {
         if (_connectivity.isOnline) {
           try {
             await _smartSync();
@@ -233,6 +238,88 @@ class OnlineOfflineManager {
     await _syncService.sync();
     await CacheManager.updateLastSyncTime(boxName);
     print('✅ Sincronización por reconexión completada');
+  }
+  
+  /// Aplica limitación automática de registros (máximo 50 total)
+  Future<void> _applyLocalRecordLimit() async {
+    final maxRecords = GlobalConfig.maxLocalRecords; // 50 registros máximo
+    final maxDays = GlobalConfig.maxDaysToKeep; // 3 días para registros sincronizados
+    final allData = await _storage.getAll();
+    
+    print('📊 Aplicando limpieza automática de localStorage...');
+    print('📊 Registros actuales: ${allData.length}');
+    
+    // 1. Eliminar registros sincronizados antiguos (más de 3 días)
+    await _cleanOldSyncedRecords(maxDays);
+    
+    // 2. Si aún hay más de 50 registros, eliminar los más antiguos
+    final remainingData = await _storage.getAll();
+    if (remainingData.length > maxRecords) {
+      await _limitToMaxRecords(maxRecords);
+    }
+    
+    final finalData = await _storage.getAll();
+    print('✅ Limpieza completada: ${allData.length} → ${finalData.length} registros');
+  }
+  
+  /// Elimina registros sincronizados antiguos (más de X días)
+  Future<void> _cleanOldSyncedRecords(int maxDays) async {
+    final cutoffDate = DateTime.now().subtract(Duration(days: maxDays));
+    final allKeys = await _storage.getKeys();
+    int deletedCount = 0;
+    
+    for (final key in allKeys) {
+      final record = await _storage.get(key);
+      if (record != null && 
+          (record['sync'] == 'true' || record.containsKey('syncDate'))) {
+        
+        // Verificar fecha de sincronización
+        final syncDate = DateTime.tryParse(record['syncDate'] ?? '') ?? 
+                        DateTime.tryParse(record['created_at'] ?? '') ?? 
+                        DateTime(1970);
+        
+        if (syncDate.isBefore(cutoffDate)) {
+          await _storage.delete(key);
+          deletedCount++;
+        }
+      }
+    }
+    
+    if (deletedCount > 0) {
+      print('🗑️ Eliminados $deletedCount registros sincronizados antiguos (más de $maxDays días)');
+    }
+  }
+  
+  /// Limita el total de registros al máximo especificado
+  Future<void> _limitToMaxRecords(int maxRecords) async {
+    final allData = await _storage.getAll();
+    
+    // Ordenar por fecha de creación (más recientes primero)
+    allData.sort((a, b) {
+      final dateA = DateTime.tryParse(a['created_at'] ?? '') ?? DateTime(1970);
+      final dateB = DateTime.tryParse(b['created_at'] ?? '') ?? DateTime(1970);
+      return dateB.compareTo(dateA);
+    });
+    
+    // Mantener solo los más recientes
+    final recordsToDelete = allData.skip(maxRecords).toList();
+    
+    // Eliminar registros antiguos
+    for (final record in recordsToDelete) {
+      final keys = await _storage.getKeys();
+      for (final key in keys) {
+        final storedRecord = await _storage.get(key);
+        if (storedRecord != null && 
+            storedRecord['created_at'] == record['created_at']) {
+          await _storage.delete(key);
+          break;
+        }
+      }
+    }
+    
+    if (recordsToDelete.length > 0) {
+      print('🗑️ Eliminados ${recordsToDelete.length} registros antiguos (límite: $maxRecords)');
+    }
   }
   
   /// Sincronizar con servidor (fuerza sincronización)
