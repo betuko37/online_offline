@@ -5,6 +5,211 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-01-27
+
+### 🚀 **MAJOR UPDATE - Ultra-Smart Sync & Duplicate Prevention**
+
+Esta versión introduce **sincronización ultra-inteligente** y **prevención de duplicados** para una experiencia de sincronización perfecta.
+
+### ✨ **Nuevas Características Principales**
+
+#### **🧠 Sincronización Ultra-Inteligente**
+- **Verificación Previa**: Hace una consulta pequeña para verificar si hay cambios
+- **Comparación Local**: Compara registros existentes con los del servidor
+- **Procesamiento Selectivo**: Solo procesa registros nuevos o modificados
+- **Logs Detallados**: Muestra estadísticas de registros procesados
+
+#### **🧹 Prevención y Limpieza de Duplicados**
+- **Detección Automática**: Identifica registros duplicados basándose en ID
+- **Limpieza Automática**: Se ejecuta después de cada sincronización incremental
+- **Limpieza Manual**: Método `cleanDuplicates()` para limpieza manual
+- **Logs Informativos**: Muestra cuántos duplicados se encontraron y eliminaron
+
+#### **⚡ Optimizaciones de Rendimiento**
+- **Límites de Seguridad**: Máximo 10 páginas por sincronización (configurable)
+- **Detección de Páginas Vacías**: Se detiene si encuentra 2 páginas consecutivas vacías
+- **Timeout Inteligente**: Usa descarga completa si han pasado más de 30 minutos
+- **Configuraciones Avanzadas**: `maxPagesPerSync`, `syncTimeoutMinutes`
+
+### 🔧 **Mejoras Técnicas**
+
+#### **Sincronización Manual vs Automática**
+- **Sincronización Automática**: Verifica tiempo transcurrido antes de sincronizar
+- **Sincronización Manual**: Siempre sincroniza sin verificar tiempo
+- **Métodos Separados**: `_downloadFromServer()` vs `_downloadFromServerManual()`
+- **Comportamiento Consistente**: Todos los métodos manuales funcionan igual
+
+#### **Nuevas Configuraciones**
+```dart
+GlobalConfig.init(
+  baseUrl: 'https://tu-api.com',
+  token: 'tu-token',
+  syncMinutes: 15, // Sincronizar cada 15 minutos
+  maxPagesPerSync: 5, // Máximo 5 páginas por sincronización
+  syncTimeoutMinutes: 30, // Usar descarga completa si han pasado más de 30 minutos
+  pageSize: 50, // Páginas más grandes para menos requests
+);
+```
+
+### 📊 **Nuevos Métodos**
+
+#### **`cleanDuplicates()` - Limpieza de Duplicados**
+```dart
+// Limpiar duplicados manualmente
+await manager.cleanDuplicates();
+```
+
+#### **Configuraciones Recomendadas por Tipo de App**
+```dart
+// 📱 Para aplicaciones móviles
+GlobalConfig.init(
+  syncMinutes: 15,
+  maxPagesPerSync: 3,
+  syncTimeoutMinutes: 30,
+  pageSize: 50,
+);
+
+// 💻 Para aplicaciones web
+GlobalConfig.init(
+  syncMinutes: 5,
+  maxPagesPerSync: 10,
+  syncTimeoutMinutes: 15,
+  pageSize: 25,
+);
+
+// 🏢 Para aplicaciones empresariales
+GlobalConfig.init(
+  syncMinutes: 30,
+  maxPagesPerSync: 20,
+  syncTimeoutMinutes: 60,
+  pageSize: 100,
+);
+```
+
+### 🎯 **Casos de Uso Optimizados**
+
+#### **Sincronización Inteligente**
+- **Primera sincronización**: Descarga completa (normal)
+- **Sincronizaciones posteriores**: 
+  - Verifica si hay cambios antes de descargar
+  - Solo procesa registros nuevos o modificados
+  - Muestra estadísticas detalladas
+  - Es mucho más rápida y eficiente
+
+#### **Prevención de Duplicados**
+- **Limpieza automática**: Los duplicados se eliminan automáticamente
+- **Mejor detección**: Los registros existentes se actualizan correctamente
+- **UI limpia**: No más registros multiplicados en la interfaz
+- **Control manual**: Puedes limpiar duplicados cuando necesites
+
+### 🐛 **Correcciones Importantes**
+
+#### **Sincronización Manual**
+- ✅ **Comportamiento Consistente**: Todos los métodos manuales funcionan igual
+- ✅ **Sin Verificaciones de Tiempo**: La sincronización manual siempre sincroniza
+- ✅ **Logs Claros**: Sabes exactamente qué tipo de sincronización se está ejecutando
+- ✅ **Comportamiento Esperado**: La sincronización manual funciona como el usuario espera
+
+#### **Prevención de Duplicados**
+- ✅ **Limpieza Automática**: Los duplicados se eliminan automáticamente
+- ✅ **Mejor Mapeo**: Mapeo correcto entre IDs y claves de almacenamiento
+- ✅ **Actualización Correcta**: Los registros existentes se actualizan usando la clave correcta
+- ✅ **Prevención de Creación**: Evita crear nuevos registros cuando ya existen
+
+### 📈 **Beneficios de Rendimiento**
+
+#### **Antes (v2.1.0)**
+```
+🔄 Sincronización manual no sincronizaba
+🔄 Registros se multiplicaban en la interfaz
+🔄 Descargas masivas en cada reinicio
+```
+
+#### **Después (v2.2.0)**
+```
+🧠 Sincronización ultra-inteligente
+🧹 Limpieza automática de duplicados
+⚡ Sincronización manual siempre funciona
+📊 Logs detallados con estadísticas
+```
+
+### 🔄 **Migración desde v2.1.0**
+
+#### **Sin Cambios Requeridos**
+```dart
+// ✅ Tu código actual funciona sin cambios
+final manager = OnlineOfflineManager(
+  boxName: 'datos',
+  endpoint: 'https://api.ejemplo.com/datos',
+);
+```
+
+#### **Optimización Opcional**
+```dart
+// 🚀 NUEVO: Agregar configuraciones para mejor rendimiento
+GlobalConfig.init(
+  baseUrl: 'https://tu-api.com',
+  token: 'tu-token',
+  maxPagesPerSync: 5, // Evitar descargas masivas
+  syncTimeoutMinutes: 30, // Usar descarga completa cuando sea necesario
+);
+
+// 🚀 NUEVO: Limpiar duplicados si es necesario
+await manager.cleanDuplicates();
+```
+
+### 🎉 **Ejemplos de Uso Optimizado**
+
+#### **Sistema de Reportes Optimizado**
+```dart
+class ReportService {
+  static final manager = OnlineOfflineManager(
+    boxName: 'reports',
+    endpoint: 'harvest-delivery',
+  );
+  
+  // Obtener reportes con sincronización inteligente
+  static Future<List<Report>> getReports() async {
+    final data = await manager.getAll(); // Sincronización automática inteligente
+    return data.map((item) => Report.fromJson(item)).toList();
+  }
+  
+  // Sincronización manual cuando sea necesario
+  static Future<void> refreshReports() async {
+    await manager.sync(); // Siempre sincroniza
+  }
+  
+  // Limpiar duplicados si es necesario
+  static Future<void> cleanupDuplicates() async {
+    await manager.cleanDuplicates();
+  }
+}
+```
+
+### 📚 **Nueva Documentación**
+
+#### **Guías de Optimización**
+- **Configuración Optimizada**: Guía para evitar descargas masivas
+- **Manejo de Duplicados**: Cómo prevenir y limpiar duplicados
+- **Sincronización Manual vs Automática**: Diferencias y cuándo usar cada una
+- **Configuraciones Recomendadas**: Por tipo de aplicación
+
+### 🎯 **Beneficios de la v2.2.0**
+
+#### **Para Desarrolladores**
+- **Sincronización Inteligente**: Evita descargas innecesarias
+- **Prevención de Duplicados**: No más registros multiplicados
+- **Configuración Flexible**: Adaptable a diferentes tipos de apps
+- **Logs Detallados**: Mejor debugging y monitoreo
+
+#### **Para Usuarios Finales**
+- **UI Más Limpia**: No más registros duplicados
+- **Sincronización Más Rápida**: Solo descarga cuando es necesario
+- **Mejor Experiencia**: Sincronización manual funciona como esperado
+- **Datos Consistentes**: Prevención automática de duplicados
+
+---
+
 ## [2.1.0] - 2025-01-27
 
 ### 🚀 **MAJOR UPDATE - Smart Sync Optimization & Performance Boost**
