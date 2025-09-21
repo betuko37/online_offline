@@ -12,6 +12,8 @@ class GlobalConfig {
   static bool _syncOnReconnect = true; // Por defecto sincronizar al reconectar
   static int _maxLocalRecords = 1000; // Por defecto sin límite (solo para managers con limpieza)
   static int _maxDaysToKeep = 7; // Por defecto 7 días (solo para managers con limpieza)
+  static int _maxPagesPerSync = 10; // Por defecto máximo 10 páginas por sincronización
+  static int _syncTimeoutMinutes = 30; // Por defecto 30 minutos para usar descarga completa
 
   /// Inicializar configuración global
   static void init({
@@ -24,6 +26,8 @@ class GlobalConfig {
     bool syncOnReconnect = true, // Por defecto true
     int maxLocalRecords = 1000, // Por defecto sin límite
     int maxDaysToKeep = 7, // Por defecto 7 días
+    int maxPagesPerSync = 10, // Por defecto máximo 10 páginas
+    int syncTimeoutMinutes = 30, // Por defecto 30 minutos
   }) {
     _baseUrl = baseUrl;
     _token = token;
@@ -34,6 +38,8 @@ class GlobalConfig {
     _syncOnReconnect = syncOnReconnect;
     _maxLocalRecords = maxLocalRecords;
     _maxDaysToKeep = maxDaysToKeep;
+    _maxPagesPerSync = maxPagesPerSync;
+    _syncTimeoutMinutes = syncTimeoutMinutes;
     _isInitialized = true;
   }
 
@@ -64,6 +70,12 @@ class GlobalConfig {
   /// Obtener máximo de días para mantener registros sincronizados
   static int get maxDaysToKeep => _maxDaysToKeep;
 
+  /// Obtener máximo de páginas por sincronización
+  static int get maxPagesPerSync => _maxPagesPerSync;
+
+  /// Obtener timeout para usar descarga completa
+  static int get syncTimeoutMinutes => _syncTimeoutMinutes;
+
   /// Verificar si está inicializado
   static bool get isInitialized => _isInitialized;
 
@@ -78,6 +90,8 @@ class GlobalConfig {
     _syncOnReconnect = true;
     _maxLocalRecords = 1000;
     _maxDaysToKeep = 7;
+    _maxPagesPerSync = 10;
+    _syncTimeoutMinutes = 30;
     _isInitialized = false;
   }
 }

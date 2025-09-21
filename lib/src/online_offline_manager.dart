@@ -132,7 +132,7 @@ class OnlineOfflineManager {
   /// - Sincroniza datos pendientes hacia el servidor
   /// - Descarga datos nuevos/modificados del servidor
   /// - Limita automáticamente los registros locales
-  /// - Retorna todos los datos (locales + sincronizados)
+  /// - Retorna todos los datos (locales + sincronizados) ordenados por fecha
   /// - Funciona offline y online
   Future<List<Map<String, dynamic>>> getAll() async {
     await _ensureInitialized();
@@ -151,22 +151,65 @@ class OnlineOfflineManager {
       await _applyLocalRecordLimit();
     }
     
-    // Retornar todos los datos (locales + sincronizados)
-    return await _storage.getAll();
+    // Obtener todos los datos y ordenarlos por fecha
+    final allData = await _storage.getAll();
+    return _sortDataByDate(allData);
   }
   
-  /// Obtener solo datos sincronizados (del servidor)
+  /// Obtener solo datos sincronizados (del servidor) ordenados por fecha
   Future<List<Map<String, dynamic>>> getSync() async {
     await _ensureInitialized();
-    return await _storage.where((item) => 
+    final syncedData = await _storage.where((item) => 
       item['sync'] == 'true' || item.containsKey('syncDate'));
+    return _sortDataByDate(syncedData);
   }
   
-  /// Obtener solo datos locales (pendientes de sincronización)
+  /// Obtener solo datos locales (pendientes de sincronización) ordenados por fecha
   Future<List<Map<String, dynamic>>> getLocal() async {
     await _ensureInitialized();
-    return await _storage.where((item) => 
+    final localData = await _storage.where((item) => 
       item['sync'] != 'true' && !item.containsKey('syncDate'));
+    return _sortDataByDate(localData);
+  }
+  
+  /// Obtener los últimos 50 registros por temporada ordenados por fecha
+  Future<List<Map<String, dynamic>>> getLatestBySeason(String seasonId, {int limit = 50}) async {
+    await _ensureInitialized();
+    
+    // Obtener todos los datos y filtrar por temporada
+    final allData = await _storage.getAll();
+    final seasonData = allData.where((item) => 
+      item['seasonId'] == seasonId).toList();
+    
+    // Ordenar por fecha y tomar los últimos N registros
+    final sortedData = _sortDataByDate(seasonData);
+    return sortedData.take(limit).toList();
+  }
+  
+  /// Obtener datos agrupados por temporada con los últimos 50 de cada una
+  Future<Map<String, List<Map<String, dynamic>>>> getLatestByAllSeasons({int limit = 50}) async {
+    await _ensureInitialized();
+    
+    final allData = await _storage.getAll();
+    final Map<String, List<Map<String, dynamic>>> seasonGroups = {};
+    
+    // Agrupar por temporada
+    for (final item in allData) {
+      final seasonId = item['seasonId']?.toString();
+      if (seasonId != null) {
+        seasonGroups[seasonId] ??= [];
+        seasonGroups[seasonId]!.add(item);
+      }
+    }
+    
+    // Ordenar cada grupo y tomar los últimos N registros
+    final result = <String, List<Map<String, dynamic>>>{};
+    for (final entry in seasonGroups.entries) {
+      final sortedData = _sortDataByDate(entry.value);
+      result[entry.key] = sortedData.take(limit).toList();
+    }
+    
+    return result;
   }
   
   /// Crear/guardar datos (se sincroniza automáticamente con getAll())
@@ -322,19 +365,48 @@ class OnlineOfflineManager {
     }
   }
   
-  /// Sincronizar con servidor (fuerza sincronización)
+  /// Sincronizar con servidor (sincronización inteligente)
   Future<void> sync() async {
     await _ensureInitialized();
-    await _syncService.sync();
-    await CacheManager.updateLastSyncTime(boxName);
+    
+    if (_connectivity.isOnline && endpoint != null) {
+      print('🔄 Sincronización manual iniciada...');
+      await _syncService.sync();
+      print('✅ Sincronización manual completada');
+    } else {
+      print('⚠️ Sin conexión - sincronización omitida');
+    }
+    
     await _notifyData();
   }
   
-  /// Sincronización forzada (ignora caché)
+  /// Sincronización forzada (ignora caché y siempre sincroniza)
   Future<void> forceSync() async {
     await _ensureInitialized();
-    await _syncService.sync();
-    await CacheManager.updateLastSyncTime(boxName);
+    
+    if (_connectivity.isOnline && endpoint != null) {
+      print('🔄 Sincronización forzada iniciada...');
+      await _syncService.forceSync();
+      print('✅ Sincronización forzada completada');
+    } else {
+      print('⚠️ Sin conexión - sincronización forzada omitida');
+    }
+    
+    await _notifyData();
+  }
+
+  /// Sincronización inmediata (bypasa todas las verificaciones de tiempo)
+  Future<void> syncNow() async {
+    await _ensureInitialized();
+    
+    if (_connectivity.isOnline && endpoint != null) {
+      print('🔄 Sincronización inmediata iniciada...');
+      await _syncService.syncNow();
+      print('✅ Sincronización inmediata completada');
+    } else {
+      print('⚠️ Sin conexión - sincronización inmediata omitida');
+    }
+    
     await _notifyData();
   }
   
@@ -374,7 +446,59 @@ class OnlineOfflineManager {
     return await _storage.where((item) => 
       item['sync'] == 'true' || item.containsKey('syncDate'));
   }
+
+  /// Limpiar registros duplicados
+  Future<void> cleanDuplicates() async {
+    await _ensureInitialized();
+    await _syncService.cleanDuplicates();
+    await _notifyData();
+    print('✅ Limpieza de duplicados completada');
+  }
   
+  /// Ordena los datos por fecha (más recientes primero)
+  /// Soporta múltiples formatos de fecha: date, timestamp, created_at, lastModifiedAt
+  List<Map<String, dynamic>> _sortDataByDate(List<Map<String, dynamic>> data) {
+    return List<Map<String, dynamic>>.from(data)..sort((a, b) {
+      final dateA = _extractDateFromRecord(a);
+      final dateB = _extractDateFromRecord(b);
+      
+      // Ordenar por fecha descendente (más recientes primero)
+      return dateB.compareTo(dateA);
+    });
+  }
+  
+  /// Extrae la fecha de un registro usando múltiples campos posibles
+  DateTime _extractDateFromRecord(Map<String, dynamic> record) {
+    // Prioridad de campos de fecha
+    final dateFields = ['date', 'lastModifiedAt', 'createdAt', 'created_at', 'timestamp'];
+    
+    for (final field in dateFields) {
+      final value = record[field];
+      if (value != null) {
+        // Manejar timestamp numérico
+        if (value is int || value is double) {
+          try {
+            return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+          } catch (e) {
+            continue;
+          }
+        }
+        
+        // Manejar string de fecha
+        if (value is String) {
+          try {
+            return DateTime.parse(value);
+          } catch (e) {
+            continue;
+          }
+        }
+      }
+    }
+    
+    // Si no se encuentra fecha válida, usar fecha muy antigua
+    return DateTime(1970);
+  }
+
   /// Cerrar recursos automáticamente
   void dispose() {
     _autoSyncTimer?.cancel();

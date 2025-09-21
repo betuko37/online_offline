@@ -45,14 +45,80 @@ class SyncService {
       // 1. Subir datos pendientes
       await _uploadPending();
       
-      // 2. Descargar datos del servidor
-      await _downloadFromServer();
+      // 2. Descargar datos del servidor (manual - siempre sincroniza)
+      await _downloadFromServerManual();
       
       _updateStatus(SyncStatus.success);
       
     } catch (e) {
       _updateStatus(SyncStatus.error);
       print('❌ Error en sincronización: $e');
+      // No re-lanzar el error para que la app continúe funcionando
+    }
+  }
+
+  /// Sincronización forzada que ignora el caché de tiempo
+  Future<void> forceSync() async {
+    if (endpoint == null) {
+      print('⚠️ No hay endpoint configurado - sincronización forzada omitida');
+      return;
+    }
+
+    if (_status == SyncStatus.syncing) {
+      print('⚠️ Sincronización ya en proceso - omitiendo');
+      return;
+    }
+
+    _updateStatus(SyncStatus.syncing);
+
+    try {
+      print('🔄 Iniciando sincronización forzada...');
+      
+      // 1. Subir datos pendientes
+      await _uploadPending();
+      
+      // 2. Descargar datos del servidor (manual - siempre sincroniza)
+      await _downloadFromServerManual();
+      
+      _updateStatus(SyncStatus.success);
+      print('✅ Sincronización forzada completada');
+      
+    } catch (e) {
+      _updateStatus(SyncStatus.error);
+      print('❌ Error en sincronización forzada: $e');
+      // No re-lanzar el error para que la app continúe funcionando
+    }
+  }
+
+  /// Sincronización inmediata que omite todas las verificaciones
+  Future<void> syncNow() async {
+    if (endpoint == null) {
+      print('⚠️ No hay endpoint configurado - sincronización inmediata omitida');
+      return;
+    }
+
+    if (_status == SyncStatus.syncing) {
+      print('⚠️ Sincronización ya en proceso - omitiendo');
+      return;
+    }
+
+    _updateStatus(SyncStatus.syncing);
+
+    try {
+      print('🔄 Iniciando sincronización inmediata...');
+      
+      // 1. Subir datos pendientes
+      await _uploadPending();
+      
+      // 2. Descargar datos del servidor (manual - siempre sincroniza)
+      await _downloadFromServerManual();
+      
+      _updateStatus(SyncStatus.success);
+      print('✅ Sincronización inmediata completada');
+      
+    } catch (e) {
+      _updateStatus(SyncStatus.error);
+      print('❌ Error en sincronización inmediata: $e');
       // No re-lanzar el error para que la app continúe funcionando
     }
   }
@@ -103,8 +169,36 @@ class SyncService {
   Future<void> _downloadFromServer() async {
     try {
       if (GlobalConfig.useIncrementalSync) {
+        // Verificar si el backend soporta sincronización incremental correctamente
+        final lastSyncTime = await CacheManager.getLastSyncTime(_storage.boxName);
+        final timeSinceLastSync = lastSyncTime != null 
+            ? DateTime.now().difference(lastSyncTime)
+            : Duration(days: 1);
+        
+        // Si ha pasado mucho tiempo o es la primera vez, usar descarga completa
+        if (timeSinceLastSync.inMinutes > GlobalConfig.syncTimeoutMinutes || lastSyncTime == null) {
+          print('🔄 Usando descarga completa (primera vez o mucho tiempo: ${timeSinceLastSync.inMinutes}m)');
+          await _downloadFull();
+        } else {
+          print('🔄 Usando sincronización ultra-inteligente (${timeSinceLastSync.inMinutes}m desde última sync)');
+          await _downloadUltraSmart();
+        }
+      } else {
+        await _downloadFull();
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Descarga datos del servidor para sincronización manual (siempre sincroniza)
+  Future<void> _downloadFromServerManual() async {
+    try {
+      if (GlobalConfig.useIncrementalSync) {
+        print('🔄 Usando sincronización incremental optimizada (manual)');
         await _downloadIncremental();
       } else {
+        print('🔄 Usando descarga completa (manual)');
         await _downloadFull();
       }
     } catch (e) {
@@ -113,6 +207,7 @@ class SyncService {
   }
   
   /// Descarga completa de datos (comportamiento original)
+  /// Ahora maneja los últimos 50 registros por temporada del backend
   Future<void> _downloadFull() async {
     final response = await _apiClient.get(endpoint!);
     
@@ -120,11 +215,15 @@ class SyncService {
       final data = response.data;
       final records = data is List ? data : [data];
       
+      print('📥 Descargados ${records.length} registros del servidor');
+      
       // Mantener registros pendientes (que no están sincronizados)
-      await _storage.where((item) => 
+      final pendingRecords = await _storage.where((item) => 
         item['sync'] != 'true' && !item.containsKey('syncDate'));
       
-      // Limpiar solo registros sincronizados
+      print('💾 Manteniendo ${pendingRecords.length} registros pendientes');
+      
+      // Limpiar solo registros sincronizados (del servidor)
       final allData = await _storage.getAll();
       final keysToDelete = <String>[];
       final allKeys = await _storage.getKeys();
@@ -140,7 +239,10 @@ class SyncService {
         await _storage.delete(key);
       }
       
+      print('🗑️ Eliminados ${keysToDelete.length} registros sincronizados antiguos');
+      
       // Agregar datos del servidor como sincronizados
+      // El backend ahora envía los últimos 50 por temporada, así que los guardamos directamente
       for (int i = 0; i < records.length; i++) {
         final serverRecord = records[i];
         if (serverRecord is Map<String, dynamic>) {
@@ -148,16 +250,58 @@ class SyncService {
           record['sync'] = 'true';  // String en lugar de bool
           record['syncDate'] = DateTime.now().toIso8601String();
           
-          final id = 'server_${DateTime.now().millisecondsSinceEpoch}_$i';
-          await _storage.save(id, record);
+          // Usar el ID del servidor si existe, sino generar uno
+          final recordId = record['id']?.toString() ?? 'server_${DateTime.now().millisecondsSinceEpoch}_$i';
+          await _storage.save(recordId, record);
         }
       }
+      
+      print('✅ Guardados ${records.length} registros del servidor');
       
     } else {
       throw Exception('Error HTTP: ${response.statusCode}');
     }
   }
   
+  /// Descarga ultra-inteligente que verifica si realmente hay cambios
+  Future<void> _downloadUltraSmart() async {
+    print('🧠 Iniciando sincronización ultra-inteligente...');
+    
+    // Obtener timestamp de última sincronización
+    final lastSyncTime = await CacheManager.getLastSyncTime(_storage.boxName);
+    final since = lastSyncTime ?? DateTime.now().subtract(const Duration(days: 30));
+    
+    print('📅 Sincronizando desde: $since');
+    
+    // Verificar si realmente necesitamos sincronizar
+    final timeSinceLastSync = DateTime.now().difference(since);
+    if (timeSinceLastSync.inMinutes < 1) {
+      print('⏭️ Sincronización omitida - muy reciente (${timeSinceLastSync.inSeconds}s)');
+      return;
+    }
+    
+    // Primero, hacer una consulta pequeña para verificar si hay cambios
+    final checkResponse = await _apiClient.get(
+      '${endpoint!}?since=${since.toIso8601String()}&limit=1&offset=0&last_modified_field=${GlobalConfig.lastModifiedField}',
+    );
+    
+    if (!checkResponse.isSuccess) {
+      throw Exception('Error HTTP en verificación: ${checkResponse.statusCode}');
+    }
+    
+    final checkData = checkResponse.data;
+    final checkRecords = checkData is List ? checkData : [checkData];
+    
+    if (checkRecords.isEmpty) {
+      print('✅ No hay cambios en el servidor - sincronización omitida');
+      await CacheManager.updateLastSyncTime(_storage.boxName);
+      return;
+    }
+    
+    // Si hay cambios, proceder con la sincronización incremental optimizada
+    await _downloadIncremental();
+  }
+
   /// Descarga incremental de datos (solo nuevos/modificados)
   Future<void> _downloadIncremental() async {
     print('🔄 Iniciando sincronización incremental...');
@@ -168,10 +312,45 @@ class SyncService {
     
     print('📅 Sincronizando desde: $since');
     
+    // Obtener registros existentes para comparación
+    final existingRecords = await _storage.getAll();
+    final existingIds = <String>{};
+    final existingTimestamps = <String, DateTime>{};
+    final existingKeys = <String, String>{}; // Mapeo de ID a clave de almacenamiento
+    
+    // Crear mapas de registros existentes para comparación rápida
+    for (final record in existingRecords) {
+      final id = record['id']?.toString();
+      if (id != null) {
+        existingIds.add(id);
+        
+        // Buscar la clave de almacenamiento para este ID
+        final keys = await _storage.getKeys();
+        for (final key in keys) {
+          final storedRecord = await _storage.get(key);
+          if (storedRecord != null && storedRecord['id']?.toString() == id) {
+            existingKeys[id] = key;
+            break;
+          }
+        }
+      }
+      
+      final timestamp = _extractTimestamp(record);
+      if (timestamp != null && id != null) {
+        existingTimestamps[id] = timestamp;
+      }
+    }
+    
+    print('📊 Registros existentes: ${existingIds.length}');
+    
     int offset = 0;
     int totalDownloaded = 0;
+    int newRecords = 0;
+    int updatedRecords = 0;
+    int skippedRecords = 0;
     bool hasMoreData = true;
     DateTime? latestTimestamp;
+    int consecutiveEmptyPages = 0;
     
     while (hasMoreData) {
       print('📥 Descargando página ${(offset / GlobalConfig.pageSize).floor() + 1}...');
@@ -188,14 +367,27 @@ class SyncService {
       final records = data is List ? data : [data];
       
       if (records.isEmpty) {
-        hasMoreData = false;
-        break;
+        consecutiveEmptyPages++;
+        if (consecutiveEmptyPages >= 2) {
+          print('⏹️ Detenido - 2 páginas consecutivas vacías');
+          hasMoreData = false;
+          break;
+        }
+        offset += GlobalConfig.pageSize;
+        continue;
       }
+      
+      consecutiveEmptyPages = 0; // Reset contador
       
       // Procesar registros de esta página
       for (final serverRecord in records) {
         if (serverRecord is Map<String, dynamic>) {
           final record = Map<String, dynamic>.from(serverRecord);
+          final recordId = record['id']?.toString();
+          
+          if (recordId == null) {
+            continue; // Saltar registros sin ID
+          }
           
           // Actualizar timestamp más reciente
           final recordTimestamp = _extractTimestamp(record);
@@ -204,22 +396,39 @@ class SyncService {
             latestTimestamp = recordTimestamp;
           }
           
-          // Buscar si ya existe (por ID o campo único)
-          final existingKey = await _findExistingRecord(record);
+          // Verificar si es un registro nuevo o modificado
+          final isNewRecord = !existingIds.contains(recordId);
+          final isModifiedRecord = !isNewRecord && 
+              existingTimestamps.containsKey(recordId) &&
+              recordTimestamp != null &&
+              recordTimestamp.isAfter(existingTimestamps[recordId]!);
           
-          if (existingKey != null) {
-            // Actualizar registro existente
-            record['sync'] = 'true';
-            record['syncDate'] = DateTime.now().toIso8601String();
-            await _storage.save(existingKey, record);
-            print('🔄 Actualizado registro existente');
-          } else {
+          if (isNewRecord) {
             // Agregar nuevo registro
             record['sync'] = 'true';
             record['syncDate'] = DateTime.now().toIso8601String();
-            final id = 'server_${DateTime.now().millisecondsSinceEpoch}_${totalDownloaded}';
-            await _storage.save(id, record);
-            print('➕ Agregado nuevo registro');
+            await _storage.save(recordId, record);
+            newRecords++;
+            print('➕ Nuevo registro: $recordId');
+          } else if (isModifiedRecord) {
+            // Actualizar registro existente usando la clave correcta
+            record['sync'] = 'true';
+            record['syncDate'] = DateTime.now().toIso8601String();
+            final existingKey = existingKeys[recordId];
+            if (existingKey != null) {
+              await _storage.save(existingKey, record);
+              updatedRecords++;
+              print('🔄 Registro actualizado: $recordId');
+            } else {
+              // Si no encontramos la clave, crear nuevo
+              await _storage.save(recordId, record);
+              newRecords++;
+              print('➕ Nuevo registro (clave no encontrada): $recordId');
+            }
+          } else {
+            // Registro sin cambios, saltar
+            skippedRecords++;
+            continue;
           }
           
           totalDownloaded++;
@@ -233,23 +442,74 @@ class SyncService {
         offset += GlobalConfig.pageSize;
       }
       
+      // Límite de páginas por sincronización
+      final currentPage = (offset / GlobalConfig.pageSize).floor() + 1;
+      if (currentPage > GlobalConfig.maxPagesPerSync) {
+        print('⚠️ Límite de páginas alcanzado (${GlobalConfig.maxPagesPerSync} páginas)');
+        hasMoreData = false;
+      }
+      
       // Límite de seguridad para evitar bucles infinitos
       if (offset > 10000) {
         print('⚠️ Límite de seguridad alcanzado en sincronización incremental');
         hasMoreData = false;
       }
+      
+      // Si no hay cambios en esta página, considerar detener
+      if (totalDownloaded == 0 && offset > GlobalConfig.pageSize * 2) {
+        print('⏹️ Detenido - no hay cambios en las primeras páginas');
+        hasMoreData = false;
+      }
     }
+    
+    // Limpiar duplicados después de la sincronización
+    await _cleanDuplicates();
     
     // Actualizar timestamp de última sincronización
-    if (latestTimestamp != null) {
-      await CacheManager.updateLastSyncTime(_storage.boxName);
-    } else {
-      await CacheManager.updateLastSyncTime(_storage.boxName);
-    }
+    await CacheManager.updateLastSyncTime(_storage.boxName);
     
-    print('✅ Sincronización incremental completada: $totalDownloaded registros procesados');
+    print('✅ Sincronización incremental completada:');
+    print('   📊 Total procesados: $totalDownloaded');
+    print('   ➕ Nuevos registros: $newRecords');
+    print('   🔄 Registros actualizados: $updatedRecords');
+    print('   ⏭️ Registros omitidos: $skippedRecords');
   }
   
+  /// Limpia registros duplicados basándose en el ID
+  Future<void> _cleanDuplicates() async {
+    print('🧹 Limpiando duplicados...');
+    
+    final allKeys = await _storage.getKeys();
+    final idToKeyMap = <String, String>{};
+    final duplicatesToDelete = <String>[];
+    
+    // Mapear IDs a claves de almacenamiento
+    for (final key in allKeys) {
+      final record = await _storage.get(key);
+      if (record != null && record['id'] != null) {
+        final id = record['id'].toString();
+        if (idToKeyMap.containsKey(id)) {
+          // Ya existe un registro con este ID, marcar para eliminar
+          duplicatesToDelete.add(key);
+          print('🗑️ Duplicado encontrado: $id (clave: $key)');
+        } else {
+          idToKeyMap[id] = key;
+        }
+      }
+    }
+    
+    // Eliminar duplicados
+    for (final key in duplicatesToDelete) {
+      await _storage.delete(key);
+    }
+    
+    if (duplicatesToDelete.isNotEmpty) {
+      print('✅ Eliminados ${duplicatesToDelete.length} registros duplicados');
+    } else {
+      print('✅ No se encontraron duplicados');
+    }
+  }
+
   /// Extrae timestamp de un registro
   DateTime? _extractTimestamp(Map<String, dynamic> record) {
     final timestampField = GlobalConfig.lastModifiedField;
@@ -266,28 +526,6 @@ class SyncService {
     return null;
   }
   
-  /// Busca un registro existente por ID o campo único
-  Future<String?> _findExistingRecord(Map<String, dynamic> record) async {
-    final allKeys = await _storage.getKeys();
-    
-    // Buscar por ID común
-    final possibleIdFields = ['id', 'ID', 'Id', '_id'];
-    for (final idField in possibleIdFields) {
-      if (record.containsKey(idField)) {
-        final recordId = record[idField].toString();
-        for (final key in allKeys) {
-          final existingRecord = await _storage.get(key);
-          if (existingRecord != null && 
-              existingRecord.containsKey(idField) &&
-              existingRecord[idField].toString() == recordId) {
-            return key;
-          }
-        }
-      }
-    }
-    
-    return null;
-  }
 
   /// Actualiza el estado de sincronización
   void _updateStatus(SyncStatus newStatus) {
@@ -328,6 +566,11 @@ class SyncService {
     }
 
     return [];
+  }
+
+  /// Limpia registros duplicados manualmente
+  Future<void> cleanDuplicates() async {
+    await _cleanDuplicates();
   }
 
   /// Libera recursos automáticamente
