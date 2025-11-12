@@ -165,32 +165,6 @@ class SyncService {
     }
   }
 
-  /// Descarga datos del servidor con manejo robusto
-  Future<void> _downloadFromServer() async {
-    try {
-      if (GlobalConfig.useIncrementalSync) {
-        // Verificar si el backend soporta sincronización incremental correctamente
-        final lastSyncTime = await CacheManager.getLastSyncTime(_storage.boxName);
-        final timeSinceLastSync = lastSyncTime != null 
-            ? DateTime.now().difference(lastSyncTime)
-            : Duration(days: 1);
-        
-        // Si ha pasado mucho tiempo o es la primera vez, usar descarga completa
-        if (timeSinceLastSync.inMinutes > GlobalConfig.syncTimeoutMinutes || lastSyncTime == null) {
-          print('🔄 Usando descarga completa (primera vez o mucho tiempo: ${timeSinceLastSync.inMinutes}m)');
-          await _downloadFull();
-        } else {
-          print('🔄 Usando sincronización ultra-inteligente (${timeSinceLastSync.inMinutes}m desde última sync)');
-          await _downloadUltraSmart();
-        }
-      } else {
-        await _downloadFull();
-      }
-    } catch (e) {
-      rethrow;
-    }
-  }
-
   /// Descarga datos del servidor para sincronización manual (siempre sincroniza)
   Future<void> _downloadFromServerManual() async {
     try {
@@ -261,45 +235,6 @@ class SyncService {
     } else {
       throw Exception('Error HTTP: ${response.statusCode}');
     }
-  }
-  
-  /// Descarga ultra-inteligente que verifica si realmente hay cambios
-  Future<void> _downloadUltraSmart() async {
-    print('🧠 Iniciando sincronización ultra-inteligente...');
-    
-    // Obtener timestamp de última sincronización
-    final lastSyncTime = await CacheManager.getLastSyncTime(_storage.boxName);
-    final since = lastSyncTime ?? DateTime.now().subtract(const Duration(days: 30));
-    
-    print('📅 Sincronizando desde: $since');
-    
-    // Verificar si realmente necesitamos sincronizar
-    final timeSinceLastSync = DateTime.now().difference(since);
-    if (timeSinceLastSync.inMinutes < 1) {
-      print('⏭️ Sincronización omitida - muy reciente (${timeSinceLastSync.inSeconds}s)');
-      return;
-    }
-    
-    // Primero, hacer una consulta pequeña para verificar si hay cambios
-    final checkResponse = await _apiClient.get(
-      '${endpoint!}?since=${since.toIso8601String()}&limit=1&offset=0&last_modified_field=${GlobalConfig.lastModifiedField}',
-    );
-    
-    if (!checkResponse.isSuccess) {
-      throw Exception('Error HTTP en verificación: ${checkResponse.statusCode}');
-    }
-    
-    final checkData = checkResponse.data;
-    final checkRecords = checkData is List ? checkData : [checkData];
-    
-    if (checkRecords.isEmpty) {
-      print('✅ No hay cambios en el servidor - sincronización omitida');
-      await CacheManager.updateLastSyncTime(_storage.boxName);
-      return;
-    }
-    
-    // Si hay cambios, proceder con la sincronización incremental optimizada
-    await _downloadIncremental();
   }
 
   /// Descarga incremental de datos (solo nuevos/modificados)
