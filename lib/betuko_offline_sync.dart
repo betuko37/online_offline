@@ -32,3 +32,7 @@ export 'src/connectivity/connectivity_service.dart';
 // Estados de sincronización
 export 'src/models/sync_status.dart';
 
+// ===== UTILIDADES =====
+// Utilidades para gestionar boxes Hive
+export 'src/utils/hive_utils.dart';
+

@@ -69,7 +69,16 @@ class ApiClient {
       ).timeout(_defaultTimeout);
       
       return ApiResponse._fromHttpResponse(response, autoExtractData: false);
+    } on TimeoutException {
+      return ApiResponse._error('Timeout: La petición tardó demasiado', isTimeout: true);
     } catch (e) {
+      // Verificar si es un error de conexión
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('failed host lookup') || 
+          errorStr.contains('socketexception') ||
+          errorStr.contains('network is unreachable')) {
+        return ApiResponse._error('Sin conexión: No se puede conectar al servidor', isNetworkError: true);
+      }
       return ApiResponse._error('Error en POST: $e');
     }
   }
@@ -86,7 +95,16 @@ class ApiClient {
       ).timeout(_defaultTimeout);
       
       return ApiResponse._fromHttpResponse(response, autoExtractData: true);
+    } on TimeoutException {
+      return ApiResponse._error('Timeout: La petición tardó demasiado', isTimeout: true);
     } catch (e) {
+      // Verificar si es un error de conexión
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('failed host lookup') || 
+          errorStr.contains('socketexception') ||
+          errorStr.contains('network is unreachable')) {
+        return ApiResponse._error('Sin conexión: No se puede conectar al servidor', isNetworkError: true);
+      }
       return ApiResponse._error('Error en GET: $e');
     }
   }
@@ -99,12 +117,16 @@ class ApiResponse {
   final int statusCode;
   final dynamic data;
   final String? error;
+  final bool isTimeout;
+  final bool isNetworkError;
 
   ApiResponse._({
     required this.isSuccess,
     required this.statusCode,
     this.data,
     this.error,
+    this.isTimeout = false,
+    this.isNetworkError = false,
   });
 
   /// Constructor desde respuesta HTTP
@@ -137,11 +159,13 @@ class ApiResponse {
   }
 
   /// Constructor para errores
-  factory ApiResponse._error(String errorMessage) {
+  factory ApiResponse._error(String errorMessage, {bool isTimeout = false, bool isNetworkError = false}) {
     return ApiResponse._(
       isSuccess: false,
       statusCode: 0,
       error: errorMessage,
+      isTimeout: isTimeout,
+      isNetworkError: isNetworkError,
     );
   }
 }

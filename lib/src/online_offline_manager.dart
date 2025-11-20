@@ -5,6 +5,7 @@ import 'connectivity/connectivity_service.dart';
 import 'models/sync_status.dart';
 import 'config/global_config.dart';
 import 'cache/cache_manager.dart';
+import 'utils/hive_utils.dart';
 
 /// Manager super simple para offline-first
 /// TODO SE INICIALIZA AUTOMÁTICAMENTE - Solo crear y usar
@@ -432,6 +433,38 @@ class OnlineOfflineManager {
     await _storage.clear();
     await _notifyData();
   }
+
+  /// Resetear todo: limpia datos locales, caché de sincronización y resetea el estado
+  /// 
+  /// Este método realiza un reset completo:
+  /// - Elimina todos los datos locales almacenados
+  /// - Limpia el caché de sincronización (timestamps de última sync)
+  /// - Resetea el estado de sincronización
+  /// - Notifica los cambios a los streams
+  /// 
+  /// Útil para:
+  /// - Reiniciar la aplicación desde cero
+  /// - Solucionar problemas de sincronización
+  /// - Limpiar datos corruptos
+  /// - Cambiar de usuario o sesión
+  Future<void> reset() async {
+    await _ensureInitialized();
+    
+    print('🔄 Iniciando reset completo...');
+    
+    // 1. Limpiar todos los datos locales
+    await _storage.clear();
+    print('✅ Datos locales eliminados');
+    
+    // 2. Limpiar caché de sincronización
+    await CacheManager.clearCache(boxName);
+    print('✅ Caché de sincronización limpiado');
+    
+    // 3. Notificar cambios (datos vacíos)
+    await _notifyData();
+    
+    print('✅ Reset completo finalizado');
+  }
   
   /// Obtener solo pendientes (inicialización automática)
   Future<List<Map<String, dynamic>>> getPending() async {
@@ -506,5 +539,81 @@ class OnlineOfflineManager {
     _syncService.dispose();
     _connectivity.dispose();
     _storage.dispose();
+  }
+
+  /// ===========================================
+  /// MÉTODOS ESTÁTICOS PARA GESTIÓN GLOBAL
+  /// ===========================================
+
+  /// Obtiene información de todas las boxes Hive abiertas
+  /// 
+  /// Este método detecta automáticamente todas las boxes:
+  /// - Boxes registradas por LocalStorage
+  /// - Boxes encontradas en el sistema de archivos
+  /// - Boxes abiertas actualmente
+  /// - La caja de caché `_cache_metadata`
+  /// 
+  /// Ya no necesitas proporcionar los nombres manualmente.
+  /// 
+  /// Retorna una lista de [HiveBoxInfo] con información de cada box
+  /// 
+  /// Ejemplo:
+  /// ```dart
+  /// // Detecta automáticamente todas las boxes
+  /// final boxesInfo = await OnlineOfflineManager.getAllOpenBoxesInfo();
+  /// for (final box in boxesInfo) {
+  ///   print('Box: ${box.name}, Registros: ${box.recordCount}');
+  /// }
+  /// ```
+  static Future<List<HiveBoxInfo>> getAllOpenBoxesInfo({
+    List<String>? knownBoxNames,
+  }) async {
+    return await HiveUtils.getAllOpenBoxesInfo(knownBoxNames: knownBoxNames);
+  }
+
+  /// Resetea completamente todas las boxes Hive
+  /// 
+  /// Detecta automáticamente todas las boxes y las resetea:
+  /// 1. Cierra todas las boxes abiertas
+  /// 2. Limpia el contenido de todas las boxes
+  /// 3. Elimina todas las boxes del disco
+  /// 4. Limpia la caja de caché completa
+  /// 
+  /// Ya no necesitas proporcionar los nombres de las boxes manualmente.
+  /// 
+  /// Parámetros:
+  /// - [includeCacheBox]: Si es true, también limpia y elimina la caja de caché `_cache_metadata`
+  /// 
+  /// Ejemplo:
+  /// ```dart
+  /// // Resetea automáticamente todas las boxes detectadas
+  /// await OnlineOfflineManager.resetAllBoxes(includeCacheBox: true);
+  /// ```
+  static Future<void> resetAllBoxes({
+    bool includeCacheBox = true,
+  }) async {
+    await HiveUtils.resetAllBoxes(includeCacheBox: includeCacheBox);
+  }
+
+  /// Elimina todas las boxes Hive del disco sin limpiar su contenido primero
+  /// 
+  /// Detecta automáticamente todas las boxes y las elimina del disco.
+  /// Este método es más rápido que [resetAllBoxes] pero no limpia el contenido
+  /// antes de eliminar. Útil cuando solo necesitas eliminar las boxes.
+  /// 
+  /// Ya no necesitas proporcionar los nombres de las boxes manualmente.
+  /// 
+  /// Parámetros:
+  /// - [includeCacheBox]: Si es true, también elimina la caja de caché `_cache_metadata`
+  /// 
+  /// Ejemplo:
+  /// ```dart
+  /// // Elimina automáticamente todas las boxes detectadas
+  /// await OnlineOfflineManager.deleteAllBoxes(includeCacheBox: true);
+  /// ```
+  static Future<void> deleteAllBoxes({
+    bool includeCacheBox = true,
+  }) async {
+    await HiveUtils.deleteAllBoxes(includeCacheBox: includeCacheBox);
   }
 }

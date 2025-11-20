@@ -8,8 +8,24 @@ class LocalStorage {
   Box? _box;
   bool _isInitialized = false;
   static bool _hiveInitialized = false;
+  
+  // Registro de todas las boxes abiertas
+  static final Set<String> _registeredBoxes = {};
 
   LocalStorage({required this.boxName});
+  
+  /// Obtener todas las boxes registradas
+  static Set<String> get registeredBoxes => Set.unmodifiable(_registeredBoxes);
+  
+  /// Registrar una box como abierta
+  static void _registerBox(String boxName) {
+    _registeredBoxes.add(boxName);
+  }
+  
+  /// Limpiar registro de boxes
+  static void clearRegisteredBoxes() {
+    _registeredBoxes.clear();
+  }
 
   /// Inicializa Hive globalmente (solo una vez por app)
   static Future<void> _initHiveOnce() async {
@@ -40,6 +56,8 @@ class LocalStorage {
       if (_box == null || !_box!.isOpen) {
         _box = await Hive.openBox(boxName);
         _isInitialized = true;
+        // Registrar la box como abierta
+        _registerBox(boxName);
       }
     } catch (e) {
       try {

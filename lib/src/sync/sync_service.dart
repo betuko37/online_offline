@@ -233,7 +233,16 @@ class SyncService {
       print('✅ Guardados ${records.length} registros del servidor');
       
     } else {
-      throw Exception('Error HTTP: ${response.statusCode}');
+      // Proporcionar mensajes de error más descriptivos
+      if (response.isNetworkError) {
+        throw Exception('Sin conexión a internet o servidor no disponible');
+      } else if (response.isTimeout) {
+        throw Exception('La petición tardó demasiado tiempo (timeout)');
+      } else if (response.statusCode == 0) {
+        throw Exception('Error de red: ${response.error ?? "No se pudo conectar al servidor"}');
+      } else {
+        throw Exception('Error HTTP ${response.statusCode}: ${response.error ?? "Error desconocido"}');
+      }
     }
   }
 
@@ -295,7 +304,16 @@ class SyncService {
       );
       
       if (!response.isSuccess) {
-        throw Exception('Error HTTP en sincronización incremental: ${response.statusCode}');
+        // Proporcionar mensajes de error más descriptivos
+        if (response.isNetworkError) {
+          throw Exception('Sin conexión a internet o servidor no disponible');
+        } else if (response.isTimeout) {
+          throw Exception('La petición tardó demasiado tiempo (timeout)');
+        } else if (response.statusCode == 0) {
+          throw Exception('Error de red: ${response.error ?? "No se pudo conectar al servidor"}');
+        } else {
+          throw Exception('Error HTTP ${response.statusCode}: ${response.error ?? "Error desconocido"}');
+        }
       }
       
       final data = response.data;
@@ -477,7 +495,16 @@ class SyncService {
     final response = await _apiClient.get(endpoint!);
 
     if (!response.isSuccess) {
-      throw Exception('Error HTTP ${response.statusCode}: ${response.error ?? "Error desconocido"}');
+      // Proporcionar mensajes de error más descriptivos
+      if (response.isNetworkError) {
+        throw Exception('Sin conexión a internet o servidor no disponible');
+      } else if (response.isTimeout) {
+        throw Exception('La petición tardó demasiado tiempo (timeout)');
+      } else if (response.statusCode == 0) {
+        throw Exception('Error de red: ${response.error ?? "No se pudo conectar al servidor"}');
+      } else {
+        throw Exception('Error HTTP ${response.statusCode}: ${response.error ?? "Error desconocido"}');
+      }
     }
 
     final data = response.data;

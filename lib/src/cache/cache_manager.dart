@@ -5,12 +5,28 @@ class CacheManager {
   static const String _cacheBoxName = '_cache_metadata';
   static Box? _cacheBox;
   static bool _isInitialized = false;
+  static bool _hiveInitialized = false;
+  
+  /// Inicializa Hive globalmente (solo una vez por app)
+  static Future<void> _initHiveOnce() async {
+    if (_hiveInitialized) return;
+    
+    try {
+      await Hive.initFlutter();
+      _hiveInitialized = true;
+    } catch (e) {
+      rethrow;
+    }
+  }
   
   /// Inicializa el box de caché
   static Future<void> _ensureInitialized() async {
     if (_isInitialized && _cacheBox != null && _cacheBox!.isOpen) return;
     
     try {
+      // Asegurar que Hive esté inicializado globalmente
+      await _initHiveOnce();
+      
       if (!Hive.isBoxOpen(_cacheBoxName)) {
         _cacheBox = await Hive.openBox(_cacheBoxName);
       } else {

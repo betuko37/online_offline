@@ -76,6 +76,18 @@ class GlobalConfig {
   /// Obtener timeout para usar descarga completa
   static int get syncTimeoutMinutes => _syncTimeoutMinutes;
 
+  /// Actualizar solo el token sin resetear toda la configuración
+  /// 
+  /// Útil cuando el token cambia después del login o refresh
+  /// No resetea la configuración, solo actualiza el token
+  static void updateToken(String newToken) {
+    if (!_isInitialized) {
+      throw Exception('GlobalConfig no está inicializado. Llama a GlobalConfig.init() primero.');
+    }
+    _token = newToken;
+    print('✅ Token actualizado en GlobalConfig');
+  }
+
   /// Verificar si está inicializado
   static bool get isInitialized => _isInitialized;
 
