@@ -10,6 +10,9 @@ import 'utils/hive_utils.dart';
 /// Manager super simple para offline-first
 /// TODO SE INICIALIZA AUTOMÁTICAMENTE - Solo crear y usar
 class OnlineOfflineManager {
+  // Registro estático de managers activos
+  static final Set<OnlineOfflineManager> _activeManagers = {};
+  
   final String boxName;
   final String? endpoint;
   final bool enableAutoCleanup; // ← Nueva opción para habilitar limpieza automática
@@ -43,6 +46,9 @@ class OnlineOfflineManager {
     this.endpoint,
     this.enableAutoCleanup = false, // ← Por defecto NO limpiar automáticamente
   }) {
+    // Registrar este manager en el conjunto de activos
+    _activeManagers.add(this);
+    
     // Inicialización automática en background
     _autoInit();
   }
@@ -83,6 +89,7 @@ class OnlineOfflineManager {
       _syncService = SyncService(
         storage: _storage,
         endpoint: endpoint,
+        onSyncComplete: _notifyData,
       );
       
       // Auto-sync inteligente cuando hay conexión (siempre habilitado)
@@ -534,6 +541,9 @@ class OnlineOfflineManager {
 
   /// Cerrar recursos automáticamente
   void dispose() {
+    // Desregistrar este manager del conjunto de activos
+    _activeManagers.remove(this);
+    
     _autoSyncTimer?.cancel();
     _dataController.close();
     _syncService.dispose();
@@ -544,6 +554,120 @@ class OnlineOfflineManager {
   /// ===========================================
   /// MÉTODOS ESTÁTICOS PARA GESTIÓN GLOBAL
   /// ===========================================
+
+  /// Sincroniza todos los managers activos en paralelo
+  /// 
+  /// Este método sincroniza TODOS los OnlineOfflineManager registrados:
+  /// - Ejecuta la sincronización de cada manager en paralelo
+  /// - Solo sincroniza managers que tienen endpoint configurado
+  /// - Solo sincroniza si hay conexión a internet
+  /// - Retorna un Map con el resultado de cada sincronización
+  /// - Actualiza automáticamente los streams de cada manager
+  /// 
+  /// Retorna un Map<String, SyncResult> donde:
+  /// - La clave es el nombre de la box
+  /// - El valor es el resultado de la sincronización (success/error)
+  /// 
+  /// Ejemplo:
+  /// ```dart
+  /// final results = await OnlineOfflineManager.syncAllManagers();
+  /// for (final entry in results.entries) {
+  ///   if (entry.value.success) {
+  ///     print('✅ ${entry.key}: sincronizado');
+  ///   } else {
+  ///     print('❌ ${entry.key}: ${entry.value.error}');
+  ///   }
+  /// }
+  /// ```
+  static Future<Map<String, SyncResult>> syncAllManagers({bool force = false}) async {
+    final results = <String, SyncResult>{};
+    
+    // Obtener copia del set para evitar modificaciones concurrentes
+    final managers = List<OnlineOfflineManager>.from(_activeManagers);
+    
+    if (managers.isEmpty) {
+      print('⚠️ No hay managers activos para sincronizar');
+      return results;
+    }
+    
+    print('🔄 Sincronizando ${managers.length} managers...');
+    print('📋 Managers registrados: ${managers.map((m) => m.boxName).join(", ")}');
+    
+    // Sincronizar todos en paralelo
+    final syncFutures = managers.map((manager) async {
+      // Solo sincronizar si tiene endpoint y está inicializado
+      if (manager.endpoint == null) {
+        print('⏭️ ${manager.boxName}: omitido (sin endpoint configurado)');
+        results[manager.boxName] = SyncResult(
+          success: false,
+          error: 'Sin endpoint configurado',
+        );
+        return;
+      }
+      
+      // Asegurar que esté inicializado
+      try {
+        await manager._ensureInitialized();
+      } catch (e) {
+        print('❌ ${manager.boxName}: error de inicialización - $e');
+        results[manager.boxName] = SyncResult(
+          success: false,
+          error: 'Error de inicialización: $e',
+        );
+        return;
+      }
+      
+      // Verificar conexión
+      if (!manager._connectivity.isOnline) {
+        print('⏭️ ${manager.boxName}: omitido (sin conexión a internet)');
+        results[manager.boxName] = SyncResult(
+          success: false,
+          error: 'Sin conexión a internet',
+        );
+        return;
+      }
+      
+      // Sincronizar
+      try {
+        print('🔄 ${manager.boxName}: iniciando sincronización...');
+        if (force) {
+          await manager._syncService.forceSync();
+        } else {
+          await manager._syncService.sync();
+        }
+        
+        // Notificar cambios en el stream
+        await manager._notifyData();
+        
+        results[manager.boxName] = SyncResult(success: true);
+        print('✅ ${manager.boxName}: sincronizado');
+      } catch (e) {
+        results[manager.boxName] = SyncResult(
+          success: false,
+          error: e.toString(),
+        );
+        print('❌ ${manager.boxName}: error - $e');
+      }
+    });
+    
+    await Future.wait(syncFutures);
+    
+    final successCount = results.values.where((r) => r.success).length;
+    final errorCount = results.values.where((r) => !r.success).length;
+    print('✅ Sincronización completada: $successCount/${ managers.length} exitosos, $errorCount errores');
+    
+    // Mostrar resumen de errores si los hay
+    if (errorCount > 0) {
+      print('📊 Resumen de errores:');
+      for (final entry in results.entries) {
+        if (!entry.value.success) {
+          print('   ❌ ${entry.key}: ${entry.value.error}');
+        }
+      }
+    }
+    
+    return results;
+  }
 
   /// Obtiene información de todas las boxes Hive abiertas
   /// 
@@ -616,4 +740,15 @@ class OnlineOfflineManager {
   }) async {
     await HiveUtils.deleteAllBoxes(includeCacheBox: includeCacheBox);
   }
+}
+
+/// Resultado de una operación de sincronización
+class SyncResult {
+  final bool success;
+  final String? error;
+  
+  SyncResult({
+    required this.success,
+    this.error,
+  });
 }

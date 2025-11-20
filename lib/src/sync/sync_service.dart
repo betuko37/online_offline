@@ -10,6 +10,7 @@ class SyncService {
   final LocalStorage _storage;
   final ApiClient _apiClient;
   final String? endpoint;
+  final Future<void> Function()? onSyncComplete;
 
   SyncStatus _status = SyncStatus.idle;
   final _statusController = StreamController<SyncStatus>.broadcast();
@@ -24,6 +25,7 @@ class SyncService {
     required LocalStorage storage,
     required this.endpoint,
     ApiClient? apiClient,
+    this.onSyncComplete,
   }) : _storage = storage,
        _apiClient = apiClient ?? ApiClient();
 
@@ -49,6 +51,15 @@ class SyncService {
       await _downloadFromServerManual();
       
       _updateStatus(SyncStatus.success);
+      
+      // Notificar que la sincronización completó exitosamente
+      if (onSyncComplete != null) {
+        try {
+          await onSyncComplete!();
+        } catch (e) {
+          // Error silencioso en el callback
+        }
+      }
       
     } catch (e) {
       _updateStatus(SyncStatus.error);
@@ -83,6 +94,15 @@ class SyncService {
       _updateStatus(SyncStatus.success);
       print('✅ Sincronización forzada completada');
       
+      // Notificar que la sincronización completó exitosamente
+      if (onSyncComplete != null) {
+        try {
+          await onSyncComplete!();
+        } catch (e) {
+          // Error silencioso en el callback
+        }
+      }
+      
     } catch (e) {
       _updateStatus(SyncStatus.error);
       print('❌ Error en sincronización forzada: $e');
@@ -115,6 +135,15 @@ class SyncService {
       
       _updateStatus(SyncStatus.success);
       print('✅ Sincronización inmediata completada');
+      
+      // Notificar que la sincronización completó exitosamente
+      if (onSyncComplete != null) {
+        try {
+          await onSyncComplete!();
+        } catch (e) {
+          // Error silencioso en el callback
+        }
+      }
       
     } catch (e) {
       _updateStatus(SyncStatus.error);
