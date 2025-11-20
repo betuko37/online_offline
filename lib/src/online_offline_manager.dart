@@ -6,6 +6,7 @@ import 'models/sync_status.dart';
 import 'config/global_config.dart';
 import 'cache/cache_manager.dart';
 import 'utils/hive_utils.dart';
+import 'api/api_client.dart';
 
 /// Manager super simple para offline-first
 /// TODO SE INICIALIZA AUTOMÁTICAMENTE - Solo crear y usar
@@ -16,6 +17,7 @@ class OnlineOfflineManager {
   final String boxName;
   final String? endpoint;
   final bool enableAutoCleanup; // ← Nueva opción para habilitar limpieza automática
+  final Duration? requestTimeout; // ← Timeout opcional para peticiones HTTP
   
   // Servicios modulares
   late final LocalStorage _storage;
@@ -45,6 +47,7 @@ class OnlineOfflineManager {
     required this.boxName,
     this.endpoint,
     this.enableAutoCleanup = false, // ← Por defecto NO limpiar automáticamente
+    this.requestTimeout, // ← Timeout opcional (por defecto 30 segundos)
   }) {
     // Registrar este manager en el conjunto de activos
     _activeManagers.add(this);
@@ -86,9 +89,15 @@ class OnlineOfflineManager {
       _connectivity = ConnectivityService();
       await _connectivity.initialize();
       
+      // Crear ApiClient con timeout personalizado si se especificó
+      final apiClient = requestTimeout != null 
+          ? ApiClient(customTimeout: requestTimeout)
+          : null;
+      
       _syncService = SyncService(
         storage: _storage,
         endpoint: endpoint,
+        apiClient: apiClient,
         onSyncComplete: _notifyData,
       );
       

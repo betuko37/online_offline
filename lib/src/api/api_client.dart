@@ -7,6 +7,15 @@ import '../config/global_config.dart';
 class ApiClient {
   /// Timeout por defecto para las peticiones
   static const Duration _defaultTimeout = Duration(seconds: 30);
+  
+  /// Timeout personalizado para este cliente (opcional)
+  final Duration? customTimeout;
+  
+  /// Constructor con timeout opcional
+  ApiClient({this.customTimeout});
+  
+  /// Timeout efectivo (personalizado o por defecto)
+  Duration get _timeout => customTimeout ?? _defaultTimeout;
 
   /// Construye headers con autenticación automática
   Map<String, String> get _headers {
@@ -66,7 +75,7 @@ class ApiClient {
         Uri.parse(url),
         headers: _headers,
         body: jsonEncode(data),
-      ).timeout(_defaultTimeout);
+      ).timeout(_timeout);
       
       return ApiResponse._fromHttpResponse(response, autoExtractData: false);
     } on TimeoutException {
@@ -92,7 +101,7 @@ class ApiClient {
       final response = await http.get(
         Uri.parse(url),
         headers: _headers,
-      ).timeout(_defaultTimeout);
+      ).timeout(_timeout);
       
       return ApiResponse._fromHttpResponse(response, autoExtractData: true);
     } on TimeoutException {
