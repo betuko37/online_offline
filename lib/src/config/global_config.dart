@@ -6,9 +6,9 @@ class GlobalConfig {
   
   // Configuración de sincronización
   static int _syncMinutes = 5; // Por defecto 5 minutos
-  static bool _useIncrementalSync = true; // Por defecto sincronización incremental
+  static bool _useIncrementalSync = false; // ⚠️ DESHABILITADO: Sincronización incremental requiere backend compatible
   static int _pageSize = 25; // Por defecto 25 registros por página
-  static String _lastModifiedField = 'lastModifiedAt'; // Campo de timestamp por defecto
+  static String _lastModifiedField = 'updatedAt'; // Campo de timestamp por defecto
   static bool _syncOnReconnect = true; // Por defecto sincronizar al reconectar
   static int _maxLocalRecords = 1000; // Por defecto sin límite (solo para managers con limpieza)
   static int _maxDaysToKeep = 7; // Por defecto 7 días (solo para managers con limpieza)
@@ -20,9 +20,9 @@ class GlobalConfig {
     required String baseUrl,
     required String token,
     int syncMinutes = 5,
-    bool useIncrementalSync = true, // Por defecto true
+    bool useIncrementalSync = false, // ⚠️ Por defecto false (requiere backend compatible)
     int pageSize = 25,
-    String lastModifiedField = 'lastModifiedAt', // Por defecto lastModifiedAt
+    String lastModifiedField = 'updatedAt', // Por defecto updatedAt
     bool syncOnReconnect = true, // Por defecto true
     int maxLocalRecords = 1000, // Por defecto sin límite
     int maxDaysToKeep = 7, // Por defecto 7 días
