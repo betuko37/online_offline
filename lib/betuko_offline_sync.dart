@@ -1,38 +1,50 @@
-// ===== GESTOR PRINCIPAL =====
+// ═══════════════════════════════════════════════════════════════════════════
+// BETUKO OFFLINE SYNC - API SIMPLIFICADA
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// USO BÁSICO:
+// 
+// 1. Configurar (una vez):
+//    GlobalConfig.init(baseUrl: 'https://api.com', token: 'tu-token');
+//
+// 2. Crear manager:
+//    final manager = OnlineOfflineManager(boxName: 'datos', endpoint: '/api/datos');
+//
+// 3. Usar:
+//    final datos = await manager.get();    // Siempre retorna datos locales
+//    await manager.save({'key': 'value'}); // Guarda localmente
+//    await OnlineOfflineManager.syncAll(); // Sincroniza con servidor
+//
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Manager principal simplificado para uso básico
+// Gestor principal - Esto es todo lo que necesitas
 export 'src/online_offline_manager.dart';
 
-// ===== CONFIGURACIÓN =====
-
-// Configuración global de la librería
+// Configuración global
 export 'src/config/global_config.dart';
 
-// Configuración de sincronización optimizada
-export 'src/config/sync_config.dart';
+// ═══════════════════════════════════════════════════════════════════════════
+// SERVICIOS AVANZADOS (opcional)
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Gestor de caché inteligente
-export 'src/cache/cache_manager.dart';
-
-// ===== SERVICIOS MODULARES =====
-
-// Cliente HTTP para comunicación con el servidor
+// Cliente HTTP
 export 'src/api/api_client.dart';
 
-// Almacenamiento local con Hive
+// Almacenamiento local
 export 'src/storage/local_storage.dart';
 
-// Servicio de sincronización offline-first
+// Servicio de sincronización
 export 'src/sync/sync_service.dart';
 
-// Servicio de conectividad de red
+// Servicio de conectividad
 export 'src/connectivity/connectivity_service.dart';
 
-// ===== MODELOS =====
 // Estados de sincronización
 export 'src/models/sync_status.dart';
 
-// ===== UTILIDADES =====
-// Utilidades para gestionar boxes Hive
+// Utilidades Hive
 export 'src/utils/hive_utils.dart';
+
+// Gestor de caché
+export 'src/cache/cache_manager.dart';
 

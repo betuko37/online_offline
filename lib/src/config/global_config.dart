@@ -1,45 +1,34 @@
-/// Configuración global de la librería
+/// Configuración global de la librería - SIMPLIFICADA
+/// Solo necesitas baseUrl y token, todo lo demás es automático
 class GlobalConfig {
   static String? _baseUrl;
   static String? _token;
   static bool _isInitialized = false;
   
-  // Configuración de sincronización
-  static int _syncMinutes = 5; // Por defecto 5 minutos
-  static bool _useIncrementalSync = false; // ⚠️ DESHABILITADO: Sincronización incremental requiere backend compatible
-  static int _pageSize = 25; // Por defecto 25 registros por página
-  static String _lastModifiedField = 'updatedAt'; // Campo de timestamp por defecto
-  static bool _syncOnReconnect = true; // Por defecto sincronizar al reconectar
-  static int _maxLocalRecords = 1000; // Por defecto sin límite (solo para managers con limpieza)
-  static int _maxDaysToKeep = 7; // Por defecto 7 días (solo para managers con limpieza)
-  static int _maxPagesPerSync = 10; // Por defecto máximo 10 páginas por sincronización
-  static int _syncTimeoutMinutes = 30; // Por defecto 30 minutos para usar descarga completa
+  // Configuración interna con valores sensatos (no expuesta al usuario)
+  static int _syncMinutes = 5;
+  static int _pageSize = 50;
+  static String _lastModifiedField = 'updatedAt';
+  static bool _syncOnReconnect = true;
+  static int _maxLocalRecords = 1000;
+  static int _maxDaysToKeep = 30;
+  static int _maxPagesPerSync = 20;
 
-  /// Inicializar configuración global
+  /// Inicializar configuración global - SÚPER SIMPLE
+  /// 
+  /// Solo necesitas 2 parámetros:
+  /// ```dart
+  /// GlobalConfig.init(
+  ///   baseUrl: 'https://tu-api.com',
+  ///   token: 'tu-token',
+  /// );
+  /// ```
   static void init({
     required String baseUrl,
     required String token,
-    int syncMinutes = 5,
-    bool useIncrementalSync = false, // ⚠️ Por defecto false (requiere backend compatible)
-    int pageSize = 25,
-    String lastModifiedField = 'updatedAt', // Por defecto updatedAt
-    bool syncOnReconnect = true, // Por defecto true
-    int maxLocalRecords = 1000, // Por defecto sin límite
-    int maxDaysToKeep = 7, // Por defecto 7 días
-    int maxPagesPerSync = 10, // Por defecto máximo 10 páginas
-    int syncTimeoutMinutes = 30, // Por defecto 30 minutos
   }) {
     _baseUrl = baseUrl;
     _token = token;
-    _syncMinutes = syncMinutes;
-    _useIncrementalSync = useIncrementalSync;
-    _pageSize = pageSize;
-    _lastModifiedField = lastModifiedField;
-    _syncOnReconnect = syncOnReconnect;
-    _maxLocalRecords = maxLocalRecords;
-    _maxDaysToKeep = maxDaysToKeep;
-    _maxPagesPerSync = maxPagesPerSync;
-    _syncTimeoutMinutes = syncTimeoutMinutes;
     _isInitialized = true;
   }
 
@@ -49,43 +38,23 @@ class GlobalConfig {
   /// Obtener token
   static String? get token => _token;
 
-  /// Obtener minutos de sincronización
+  // Getters internos (valores automáticos)
   static int get syncMinutes => _syncMinutes;
-
-  /// Obtener si usa sincronización incremental
-  static bool get useIncrementalSync => _useIncrementalSync;
-
-  /// Obtener tamaño de página
   static int get pageSize => _pageSize;
-
-  /// Obtener campo de última modificación
   static String get lastModifiedField => _lastModifiedField;
-
-  /// Obtener si debe sincronizar al reconectar
   static bool get syncOnReconnect => _syncOnReconnect;
-
-  /// Obtener máximo de registros locales
   static int get maxLocalRecords => _maxLocalRecords;
-
-  /// Obtener máximo de días para mantener registros sincronizados
   static int get maxDaysToKeep => _maxDaysToKeep;
-
-  /// Obtener máximo de páginas por sincronización
   static int get maxPagesPerSync => _maxPagesPerSync;
-
-  /// Obtener timeout para usar descarga completa
-  static int get syncTimeoutMinutes => _syncTimeoutMinutes;
 
   /// Actualizar solo el token sin resetear toda la configuración
   /// 
   /// Útil cuando el token cambia después del login o refresh
-  /// No resetea la configuración, solo actualiza el token
   static void updateToken(String newToken) {
     if (!_isInitialized) {
       throw Exception('GlobalConfig no está inicializado. Llama a GlobalConfig.init() primero.');
     }
     _token = newToken;
-    print('✅ Token actualizado en GlobalConfig');
   }
 
   /// Verificar si está inicializado
@@ -96,14 +65,12 @@ class GlobalConfig {
     _baseUrl = null;
     _token = null;
     _syncMinutes = 5;
-    _useIncrementalSync = true;
-    _pageSize = 25;
-    _lastModifiedField = 'lastModifiedAt';
+    _pageSize = 50;
+    _lastModifiedField = 'updatedAt';
     _syncOnReconnect = true;
     _maxLocalRecords = 1000;
-    _maxDaysToKeep = 7;
-    _maxPagesPerSync = 10;
-    _syncTimeoutMinutes = 30;
+    _maxDaysToKeep = 30;
+    _maxPagesPerSync = 20;
     _isInitialized = false;
   }
 }

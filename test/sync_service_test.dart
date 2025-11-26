@@ -181,47 +181,6 @@ void main() {
       });
     });
 
-    group('Direct Server Access', () {
-      test('should handle getDirectFromServer call', () async {
-        expect(() async {
-          await syncService.getDirectFromServer();
-        }, returnsNormally);
-      });
-
-      test('should return list from getDirectFromServer', () async {
-        final result = await syncService.getDirectFromServer();
-        expect(result, isA<List<Map<String, dynamic>>>());
-      });
-
-      test('should handle getDirectFromServer without endpoint', () async {
-        final noEndpointService = SyncService(
-          storage: localStorage,
-          endpoint: null,
-        );
-        
-        // Debería lanzar excepción por falta de endpoint
-        expect(() async {
-          await noEndpointService.getDirectFromServer();
-        }, throwsException);
-        
-        noEndpointService.dispose();
-      });
-
-      test('should handle network errors in getDirectFromServer', () async {
-        // Configurar con endpoint que causará error
-        final errorService = SyncService(
-          storage: localStorage,
-          endpoint: '/nonexistent_endpoint',
-        );
-        
-        expect(() async {
-          await errorService.getDirectFromServer();
-        }, throwsException);
-        
-        errorService.dispose();
-      });
-    });
-
     group('Error Handling', () {
       test('should handle sync errors gracefully', () async {
         // Crear service con endpoint inválido
@@ -276,9 +235,9 @@ void main() {
         // Verificar que GlobalConfig está configurado
         expect(GlobalConfig.isInitialized, true);
         
-        // Los métodos deberían usar ApiClient internamente
+        // Sync debería usar ApiClient internamente
         expect(() async {
-          await syncService.getDirectFromServer();
+          await syncService.sync();
         }, returnsNormally);
       });
     });
@@ -333,7 +292,6 @@ void main() {
           
           expect(() async {
             await service.sync();
-            await service.getDirectFromServer();
           }, returnsNormally);
           
           service.dispose();
@@ -357,7 +315,6 @@ void main() {
       test('should provide consistent interface', () {
         // Verificar métodos principales
         expect(syncService.sync, isA<Function>());
-        expect(syncService.getDirectFromServer, isA<Function>());
         expect(syncService.dispose, isA<Function>());
         
         // Verificar propiedades
@@ -375,7 +332,6 @@ void main() {
         );
         
         expect(service2.sync, isA<Function>());
-        expect(service2.getDirectFromServer, isA<Function>());
         expect(service2.status, isA<SyncStatus>());
         
         service2.dispose();

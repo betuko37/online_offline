@@ -1,280 +1,409 @@
 # 📱 Offline-First Súper Simple
 
-Una librería Flutter para manejar datos offline-first con sincronización automática inteligente. **Solo necesitas 3 métodos: `getAll()`, `getSync()`, `getLocal()`**
+Una librería Flutter para manejar datos offline-first. **La API más simple posible.**
 
-## 🚀 Uso Súper Simple
+## 🚀 API Súper Simple
 
-### 1. Configuración (solo una vez)
+| Método | Descripción |
+|--------|-------------|
+| `get()` | Retorna datos locales (siempre rápido) |
+| `save()` | Guarda datos localmente |
+| `delete()` | Elimina datos |
+| `syncAll()` | Sincroniza todos los managers con el servidor |
+
+## 📦 Instalación
+
+```yaml
+dependencies:
+  betuko_offline_sync: ^3.0.0
+```
+
+## 🔧 Uso Básico (3 pasos)
+
+### 1. Configurar API (una sola vez)
+
 ```dart
-// Configurar tu API con configuración de sincronización
 GlobalConfig.init(
   baseUrl: 'https://tu-api.com',
   token: 'tu-token',
-  syncMinutes: 5, // Sincronizar cada 5 minutos
-  useIncrementalSync: true, // Usar sincronización incremental
-  pageSize: 25, // 25 registros por página
-  lastModifiedField: 'updated_at', // Campo de timestamp
 );
 ```
 
 ### 2. Crear Manager
+
 ```dart
-final manager = OnlineOfflineManager(
-  boxName: 'reports',
-  endpoint: 'api/reports',
+final reportes = OnlineOfflineManager(
+  boxName: 'reportes',
+  endpoint: '/api/reportes',
 );
 ```
 
-### 3. Usar Datos (¡ESTO ES TODO!)
+### 3. Usar Datos
+
 ```dart
-// ¡SÚPER SIMPLE! Solo estos 3 métodos:
+// Obtener datos (SIEMPRE locales - súper rápido)
+final datos = await reportes.get();
 
-// Obtener todos los datos (con sincronización automática)
-final allData = await manager.getAll();
-
-// Obtener solo datos sincronizados (del servidor)
-final syncData = await manager.getSync();
-
-// Obtener solo datos locales (pendientes de sincronización)
-final localData = await manager.getLocal();
-```
-
-**¡Eso es todo!** La librería automáticamente:
-- ✅ Sincroniza datos pendientes hacia el servidor
-- ✅ Descarga datos nuevos/modificados del servidor  
-- ✅ Retorna todos los datos (locales + sincronizados)
-- ✅ Funciona offline y online
-- ✅ Optimizado para grandes volúmenes (2280+ registros)
-
-## 📊 Configuración de Sincronización
-
-### En GlobalConfig.init():
-```dart
-GlobalConfig.init(
-  baseUrl: 'https://tu-api.com',
-  token: 'tu-token',
-  syncMinutes: 5, // ← Minutos entre sincronizaciones
-  useIncrementalSync: true, // ← Sincronización incremental
-  pageSize: 25, // ← Registros por página
-  lastModifiedField: 'updated_at', // ← Campo de timestamp
-);
-```
-
-### Configuraciones Recomendadas:
-
-#### Para Grandes Volúmenes (Tu Caso - 2280+ registros)
-```dart
-GlobalConfig.init(
-  baseUrl: 'https://tu-api.com',
-  token: 'tu-token',
-  syncMinutes: 5, // Sincronizar cada 5 minutos
-  useIncrementalSync: true, // Sincronización incremental
-  pageSize: 25, // 25 registros por página
-  lastModifiedField: 'updated_at',
-);
-```
-
-#### Para Datos Frecuentes
-```dart
-GlobalConfig.init(
-  baseUrl: 'https://tu-api.com',
-  token: 'tu-token',
-  syncMinutes: 1, // Sincronizar cada 1 minuto
-  useIncrementalSync: true,
-  pageSize: 20, // 20 registros por página
-  lastModifiedField: 'updated_at',
-);
-```
-
-#### Para Datos Ocasionales
-```dart
-GlobalConfig.init(
-  baseUrl: 'https://tu-api.com',
-  token: 'tu-token',
-  syncMinutes: 15, // Sincronizar cada 15 minutos
-  useIncrementalSync: true,
-  pageSize: 50, // 50 registros por página
-  lastModifiedField: 'updated_at',
-);
-```
-
-## 🔄 Cómo Funciona
-
-### getAll() - Método Principal
-1. **Sincroniza automáticamente** si hay conexión
-2. **Descarga datos nuevos/modificados** del servidor
-3. **Sube datos pendientes** al servidor
-4. **Retorna todos los datos** (locales + sincronizados)
-
-### getSync() - Solo Sincronizados
-- Retorna solo datos que vienen del servidor
-- Útil para mostrar datos "oficiales"
-
-### getLocal() - Solo Locales
-- Retorna solo datos pendientes de sincronización
-- Útil para mostrar datos "pendientes"
-
-## 💾 Operaciones Básicas
-
-### Guardar Datos
-```dart
-await manager.save({
-  'title': 'Mi Reporte',
-  'description': 'Descripción',
-  'status': 'active',
+// Guardar datos
+await reportes.save({
+  'titulo': 'Mi Reporte',
+  'descripcion': 'Descripción',
 });
-// Se sincroniza automáticamente con getAll()
+
+// Sincronizar cuando el usuario quiera
+await OnlineOfflineManager.syncAll();
 ```
 
-### Eliminar Datos
-```dart
-await manager.delete('item_id');
-// Se sincroniza automáticamente con getAll()
-```
+**¡Eso es todo!**
+
+## 💡 Filosofía
+
+La librería sigue un principio simple:
+
+- **`get()`** → Siempre retorna datos locales (instantáneo)
+- **`syncAll()`** → El usuario decide cuándo actualizar
+
+Esto significa que:
+1. Tu app SIEMPRE es rápida (datos locales)
+2. El usuario controla cuándo sincronizar
+3. Funciona offline perfectamente
 
 ## 📱 Ejemplo Completo
 
 ```dart
+import 'package:flutter/material.dart';
+import 'package:betuko_offline_sync/betuko_offline_sync.dart';
+
+void main() {
+  // Configurar una vez al inicio
+  GlobalConfig.init(
+    baseUrl: 'https://tu-api.com',
+    token: 'tu-token',
+  );
+  
+  runApp(MyApp());
+}
+
 class MyApp extends StatefulWidget {
   @override
   _MyAppState createState() => _MyAppState();
 }
 
 class _MyAppState extends State<MyApp> {
-  late OnlineOfflineManager _manager;
-  List<Map<String, dynamic>> _allData = [];
-  List<Map<String, dynamic>> _syncData = [];
-  List<Map<String, dynamic>> _localData = [];
+  final reportes = OnlineOfflineManager(
+    boxName: 'reportes',
+    endpoint: '/api/reportes',
+  );
+  
+  List<Map<String, dynamic>> datos = [];
+  bool isSyncing = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeManager();
+    _loadData();
   }
 
-  void _initializeManager() async {
-    // 1. Configurar API
-    GlobalConfig.init(
-      baseUrl: 'https://tu-api.com',
-      token: 'tu-token',
-      syncMinutes: 5,
-      useIncrementalSync: true,
-      pageSize: 25,
-      lastModifiedField: 'updated_at',
-    );
+  Future<void> _loadData() async {
+    // Siempre retorna datos locales (instantáneo)
+    final data = await reportes.get();
+    setState(() => datos = data);
+  }
 
-    // 2. Crear manager
-    _manager = OnlineOfflineManager(
-      boxName: 'reports',
-      endpoint: 'api/reports',
-    );
-
-    // 3. Escuchar cambios
-    _manager.dataStream.listen((data) {
-      setState(() {
-        _allData = data;
-      });
-    });
-
-    // 4. ¡ESTO ES TODO! Solo estos 3 métodos
-    final allData = await _manager.getAll();
-    final syncData = await _manager.getSync();
-    final localData = await _manager.getLocal();
+  Future<void> _syncData() async {
+    setState(() => isSyncing = true);
     
-    setState(() {
-      _allData = allData;
-      _syncData = syncData;
-      _localData = localData;
+    // Sincronizar con el servidor
+    await OnlineOfflineManager.syncAll();
+    
+    // Recargar datos locales
+    await _loadData();
+    
+    setState(() => isSyncing = false);
+  }
+
+  Future<void> _addData() async {
+    await reportes.save({
+      'titulo': 'Nuevo Reporte',
+      'descripcion': 'Descripción del reporte',
+      'fecha': DateTime.now().toIso8601String(),
     });
+    await _loadData();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Mi App')),
-      body: Column(
-        children: [
-          Text('Total: ${_allData.length}'),
-          Text('Sincronizados: ${_syncData.length}'),
-          Text('Locales: ${_localData.length}'),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _allData.length,
-              itemBuilder: (context, index) {
-                final item = _allData[index];
-                return ListTile(
-                  title: Text(item['title'] ?? 'Sin título'),
-                  trailing: item['sync'] == 'true'
-                      ? Icon(Icons.cloud_done, color: Colors.green)
-                      : Icon(Icons.cloud_off, color: Colors.orange),
-                );
-              },
-            ),
+      appBar: AppBar(
+        title: Text('Mi App'),
+        actions: [
+          // Botón de sincronización
+          IconButton(
+            icon: isSyncing 
+              ? CircularProgressIndicator(color: Colors.white)
+              : Icon(Icons.sync),
+            onPressed: isSyncing ? null : _syncData,
           ),
         ],
       ),
+      body: ListView.builder(
+        itemCount: datos.length,
+        itemBuilder: (context, index) {
+          final item = datos[index];
+          final isSynced = item['sync'] == 'true';
+          
+          return ListTile(
+            title: Text(item['titulo'] ?? 'Sin título'),
+            trailing: Icon(
+              isSynced ? Icons.cloud_done : Icons.cloud_off,
+              color: isSynced ? Colors.green : Colors.orange,
+            ),
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addData,
+        child: Icon(Icons.add),
+      ),
     );
+  }
+
+  @override
+  void dispose() {
+    reportes.dispose();
+    super.dispose();
   }
 }
 ```
 
-## 🎯 Beneficios
+## 🔄 Múltiples Managers
 
-### Antes (Sincronización Completa)
-- ❌ Descarga 2280 registros cada vez
-- ❌ Lento y consume mucha banda
-- ❌ API compleja con muchos métodos
+Puedes tener varios managers y sincronizarlos todos a la vez:
 
-### Después (Súper Simple)
-- ✅ Solo 3 métodos: `getAll()`, `getSync()`, `getLocal()`
-- ✅ Sincronización incremental (25 registros por página)
-- ✅ Configuración en `GlobalConfig`
-- ✅ Rápido y eficiente
-- ✅ API súper simple
+```dart
+// Crear managers
+final reportes = OnlineOfflineManager(
+  boxName: 'reportes', 
+  endpoint: '/api/reportes',
+);
 
-## 🔧 Configuración del Servidor
+final usuarios = OnlineOfflineManager(
+  boxName: 'usuarios', 
+  endpoint: '/api/usuarios',
+);
 
-Tu servidor debe soportar estos parámetros:
+final productos = OnlineOfflineManager(
+  boxName: 'productos', 
+  endpoint: '/api/productos',
+);
 
-```http
-GET /api/reports?since=2024-01-01T00:00:00Z&limit=25&offset=0&last_modified_field=updated_at
-```
+// Obtener datos de cada uno (siempre locales)
+final misReportes = await reportes.get();
+final misUsuarios = await usuarios.get();
+final misProductos = await productos.get();
 
-### Respuesta Esperada
-```json
-{
-  "data": [
-    {
-      "id": 1,
-      "title": "Reporte 1",
-      "updated_at": "2024-01-15T10:30:00Z"
-    }
-  ]
+// Sincronizar TODOS con un solo comando
+final results = await OnlineOfflineManager.syncAll();
+
+// Ver resultados
+for (final entry in results.entries) {
+  if (entry.value.success) {
+    print('✅ ${entry.key}: sincronizado');
+  } else {
+    print('❌ ${entry.key}: ${entry.value.error}');
+  }
 }
 ```
 
-## 📝 Logs Automáticos
+## 📊 Métodos Disponibles
 
-La librería incluye logs informativos:
+### OnlineOfflineManager (instancia)
 
+| Método | Descripción |
+|--------|-------------|
+| `get()` | Todos los datos |
+| `getSynced()` | Solo datos sincronizados (List) |
+| `getPending()` | Solo datos pendientes (List) |
+| `getFullData()` | TODO: datos + contadores (FullSyncData) |
+| `getSyncInfo()` | Solo contadores (SyncInfo) |
+| `save(Map data)` | Guardar |
+| `delete(String id)` | Eliminar |
+| `clear()` | Limpiar datos |
+| `reset()` | Reset completo |
+| `dispose()` | Liberar recursos |
+
+### OnlineOfflineManager (estático)
+
+| Método | Descripción |
+|--------|-------------|
+| `syncAll()` | Sincroniza todos los managers activos |
+| `getAllSyncInfo()` | Estado de sync de todos los managers |
+| `resetAll()` | Resetea TODO (managers, boxes, caché) |
+| `getAllBoxesInfo()` | Info de todas las boxes Hive |
+| `debugInfo()` | Imprime info de debug en consola |
+| `getTotalRecordCount()` | Total de registros en todos los managers |
+| `getTotalPendingCount()` | Total de registros pendientes |
+| `deleteAllBoxes()` | Elimina todas las boxes del disco |
+
+### GlobalConfig
+
+| Método | Descripción |
+|--------|-------------|
+| `init(baseUrl, token)` | Configura la API |
+| `updateToken(token)` | Actualiza solo el token |
+| `clear()` | Limpia la configuración |
+
+## 📊 Ver Estado de Sincronización
+
+### Obtener datos separados
+```dart
+// Obtener solo datos sincronizados (con todos sus campos)
+final sincronizados = await reportes.getSynced();
+for (final item in sincronizados) {
+  print('Sync: ${item['titulo']} - ID: ${item['id']}');
+}
+
+// Obtener solo datos pendientes (con todos sus campos)
+final pendientes = await reportes.getPending();
+for (final item in pendientes) {
+  print('Pendiente: ${item['titulo']}');
+}
 ```
-🔄 Sincronización automática iniciada...
-📅 Sincronizando desde: 2024-01-01 00:00:00.000
-📥 Descargando página 1...
-🔄 Actualizado registro existente
-➕ Agregado nuevo registro
-✅ Sincronización automática completada
+
+### Obtener TODO junto (datos + contadores)
+```dart
+final data = await reportes.getFullData();
+
+// Contadores
+print('Total: ${data.total}');
+print('Sincronizados: ${data.syncedCount}');
+print('Pendientes: ${data.pendingCount}');
+print('Porcentaje: ${data.syncPercentage}%');
+print('¿Todo sync?: ${data.isFullySynced}');
+
+// Ver datos sincronizados
+print('--- SINCRONIZADOS ---');
+for (final item in data.synced) {
+  print('  ${item['titulo']}');
+}
+
+// Ver datos pendientes
+print('--- PENDIENTES ---');
+for (final item in data.pending) {
+  print('  ${item['titulo']}');
+}
 ```
 
-## 🎉 ¡Eso es Todo!
+### Solo contadores (más ligero)
+```dart
+final info = await reportes.getSyncInfo();
+print('Total: ${info.total}');
+print('Sincronizados: ${info.synced}');
+print('Pendientes: ${info.pending}');
+```
 
-**Solo necesitas 3 métodos y la librería maneja todo automáticamente:**
+### De todos los managers
+```dart
+final estados = await OnlineOfflineManager.getAllSyncInfo();
 
-- ✅ `getAll()` - Todos los datos con sincronización automática
-- ✅ `getSync()` - Solo datos sincronizados
-- ✅ `getLocal()` - Solo datos locales
-- ✅ Configuración en `GlobalConfig`
-- ✅ Sincronización incremental
-- ✅ Optimización para grandes volúmenes
+for (final entry in estados.entries) {
+  final nombre = entry.key;
+  final info = entry.value;
+  print('$nombre: ${info.synced}/${info.total} (${info.pending} pendientes)');
+}
 
-**¡Tu problema de 2280 registros está resuelto!** 🚀
+// Ejemplo de salida:
+// reportes: 147/150 (3 pendientes)
+// usuarios: 50/50 (0 pendientes)
+// productos: 200/200 (0 pendientes)
+```
+
+### Contadores globales rápidos
+```dart
+final totalRegistros = await OnlineOfflineManager.getTotalRecordCount();
+final totalPendientes = await OnlineOfflineManager.getTotalPendingCount();
+print('Total: $totalRegistros, Pendientes: $totalPendientes');
+```
+
+## 🔧 Debug y Reset
+
+### Ver información de debug
+```dart
+// Imprime info completa en consola
+await OnlineOfflineManager.debugInfo();
+
+// Salida:
+// ═══════════════════════════════════════════════════════════
+// 📊 DEBUG INFO - OnlineOfflineManager
+// ═══════════════════════════════════════════════════════════
+// 📦 Managers activos: 2
+//    • reportes: 150 registros (3 pendientes)
+//    • usuarios: 50 registros (0 pendientes)
+// 💾 Boxes Hive:
+//    • reportes: 150 registros (abierta)
+//    • usuarios: 50 registros (abierta)
+// ⚙️ GlobalConfig:
+//    • Inicializado: true
+//    • BaseURL: https://api.com
+// ═══════════════════════════════════════════════════════════
+```
+
+### Obtener info de boxes
+```dart
+final boxes = await OnlineOfflineManager.getAllBoxesInfo();
+for (final box in boxes) {
+  print('${box.name}: ${box.recordCount} registros');
+}
+```
+
+### Contadores globales
+```dart
+final total = await OnlineOfflineManager.getTotalRecordCount();
+final pendientes = await OnlineOfflineManager.getTotalPendingCount();
+print('Total: $total, Pendientes: $pendientes');
+```
+
+### Reset global (limpia TODO)
+```dart
+// ⚠️ Cuidado: elimina todos los datos locales
+await OnlineOfflineManager.resetAll();
+```
+
+## 🎯 Ventajas
+
+- ✅ **Súper simple**: Solo 4 métodos principales
+- ✅ **Siempre rápido**: `get()` retorna datos locales
+- ✅ **Control total**: El usuario decide cuándo sincronizar
+- ✅ **Funciona offline**: Los datos siempre están disponibles
+- ✅ **Automático**: Sincronización y manejo de errores incluidos
+
+## 🔧 Streams (Opcional)
+
+Si prefieres usar streams para reactividad:
+
+```dart
+// Escuchar cambios en los datos
+reportes.dataStream.listen((datos) {
+  setState(() => misDatos = datos);
+});
+
+// Escuchar estado de sincronización
+reportes.statusStream.listen((status) {
+  print('Estado: $status');
+});
+
+// Escuchar conectividad
+reportes.connectivityStream.listen((isOnline) {
+  print('Online: $isOnline');
+});
+```
+
+## 🎉 ¡Listo!
+
+Con solo:
+- `GlobalConfig.init()` - Configurar una vez
+- `get()` - Obtener datos
+- `save()` - Guardar datos  
+- `syncAll()` - Sincronizar
+
+**¡Tu app offline-first está lista!** 🚀
