@@ -5,6 +5,128 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2025-11-26
+
+### 🚀 **MAJOR RELEASE - API Simplificada**
+
+Esta versión es una **reescritura completa** enfocada en simplicidad extrema.
+
+### ⚠️ **BREAKING CHANGES**
+
+#### GlobalConfig Simplificado
+```dart
+// ANTES (muchos parámetros)
+GlobalConfig.init(
+  baseUrl: 'https://api.com',
+  token: 'tu-token',
+  syncMinutes: 5,
+  useIncrementalSync: true,
+  pageSize: 25,
+  lastModifiedField: 'updated_at',
+  syncOnReconnect: true,
+  maxLocalRecords: 1000,
+  maxDaysToKeep: 7,
+  maxPagesPerSync: 10,
+  syncTimeoutMinutes: 30,
+);
+
+// DESPUÉS (solo 2 parámetros)
+GlobalConfig.init(
+  baseUrl: 'https://api.com',
+  token: 'tu-token',
+);
+```
+
+#### API del Manager Simplificada
+```dart
+// ANTES
+final datos = await manager.getAll();  // Sincronizaba automáticamente (lento)
+await manager.sync();
+await manager.forceSync();
+await manager.syncNow();
+await manager.getSync();
+await manager.getLocal();
+
+// DESPUÉS
+final datos = await manager.get();     // Siempre local (instantáneo)
+await OnlineOfflineManager.syncAll();  // Un solo método para sincronizar
+```
+
+### ✨ **Nueva API Super Simple**
+
+#### Métodos de Instancia
+| Método | Descripción |
+|--------|-------------|
+| `get()` | Todos los datos locales (instantáneo) |
+| `getSynced()` | Solo datos sincronizados |
+| `getPending()` | Solo datos pendientes |
+| `getFullData()` | Datos + contadores (FullSyncData) |
+| `getSyncInfo()` | Solo contadores (SyncInfo) |
+| `save(data)` | Guardar localmente |
+| `delete(id)` | Eliminar |
+| `clear()` | Limpiar datos |
+| `reset()` | Reset completo |
+
+#### Métodos Estáticos
+| Método | Descripción |
+|--------|-------------|
+| `syncAll()` | Sincronizar TODOS los managers |
+| `getAllSyncInfo()` | Estado de todos los managers |
+| `resetAll()` | Reset global |
+| `debugInfo()` | Info de debug en consola |
+| `getAllBoxesInfo()` | Info de boxes Hive |
+| `getTotalRecordCount()` | Total de registros |
+| `getTotalPendingCount()` | Total de pendientes |
+| `deleteAllBoxes()` | Eliminar boxes del disco |
+
+### ✨ **Nuevas Características**
+
+#### Ver Estado de Sincronización
+```dart
+// Obtener todo junto
+final data = await manager.getFullData();
+print('Total: ${data.total}');
+print('Sincronizados: ${data.syncedCount}');
+print('Pendientes: ${data.pendingCount}');
+
+// Acceder a los datos
+for (final item in data.synced) { ... }
+for (final item in data.pending) { ... }
+```
+
+#### Debug Info
+```dart
+await OnlineOfflineManager.debugInfo();
+// Imprime info detallada de todos los managers y boxes
+```
+
+#### Estado Global
+```dart
+final estados = await OnlineOfflineManager.getAllSyncInfo();
+for (final entry in estados.entries) {
+  print('${entry.key}: ${entry.value.synced}/${entry.value.total}');
+}
+```
+
+### 🗑️ **Eliminado**
+
+- `SyncConfig` - Ya no se necesita
+- `getAll()` - Reemplazado por `get()`
+- `getSync()` / `getLocal()` - Reemplazados por `getSynced()` / `getPending()`
+- `sync()`, `forceSync()`, `syncNow()` - Reemplazados por `syncAll()`
+- `syncAllManagers()` - Reemplazado por `syncAll()`
+- Sincronización automática en `get()` - Ahora es manual con `syncAll()`
+- Parámetros de configuración avanzados en `GlobalConfig`
+
+### 📝 **Filosofía de la Nueva Versión**
+
+1. **`get()` siempre es instantáneo** - Lee datos locales sin esperar
+2. **El usuario decide cuándo sincronizar** - Llamando a `syncAll()`
+3. **Configuración mínima** - Solo baseUrl y token
+4. **Una forma de hacer las cosas** - Sin métodos redundantes
+
+---
+
 ## [2.2.0] - 2025-01-27
 
 ### 🚀 **MAJOR UPDATE - Ultra-Smart Sync & Duplicate Prevention**
