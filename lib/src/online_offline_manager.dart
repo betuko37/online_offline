@@ -24,9 +24,19 @@ import 'utils/hive_utils.dart';
 /// // 4. Cuando el usuario quiera actualizar, llamar syncAll
 /// await OnlineOfflineManager.syncAll();
 /// ```
+/// 
+/// SINCRONIZACIÓN AUTOMÁTICA:
+/// - Se ejecuta automáticamente cada 10 minutos cuando hay internet
+/// - Se ejecuta automáticamente cuando se recupera la conexión a internet
 class OnlineOfflineManager {
   // Registro estático de managers activos
   static final Set<OnlineOfflineManager> _activeManagers = {};
+  
+  // Auto-sync variables
+  static Timer? _autoSyncTimer;
+  static StreamSubscription<bool>? _connectivitySubscription;
+  static bool _autoSyncInitialized = false;
+  static bool _lastKnownOnlineState = false;
   
   final String boxName;
   final String? endpoint;
@@ -66,6 +76,68 @@ class OnlineOfflineManager {
     
     // Inicialización automática en background
     _autoInit();
+    
+    // Inicializar auto-sync cuando se crea el primer manager
+    _initAutoSync();
+  }
+  
+  /// Inicializa sincronización automática (solo una vez)
+  static void _initAutoSync() {
+    if (_autoSyncInitialized) return;
+    _autoSyncInitialized = true;
+    
+    // Timer periódico cada 10 minutos
+    final syncInterval = Duration(minutes: GlobalConfig.syncMinutes);
+    _autoSyncTimer = Timer.periodic(syncInterval, (_) async {
+      // Solo sincronizar si hay managers activos y hay internet
+      if (_activeManagers.isEmpty) return;
+      
+      final anyOnline = _activeManagers.any((m) => m._isInitialized && m._connectivity.isOnline);
+      if (anyOnline) {
+        print('🔄 Auto-sync: ejecutando sincronización periódica (cada ${GlobalConfig.syncMinutes} min)...');
+        await syncAll();
+      }
+    });
+    
+    // Escuchar cambios de conectividad para sync al reconectar
+    _setupConnectivityListener();
+  }
+  
+  /// Configura el listener de conectividad para sync al reconectar
+  static void _setupConnectivityListener() {
+    // Esperar a que haya al menos un manager inicializado
+    Future.delayed(const Duration(seconds: 2), () {
+      if (_activeManagers.isEmpty) return;
+      
+      // Buscar un manager inicializado para usar su connectivity stream
+      final initializedManager = _activeManagers.firstWhere(
+        (m) => m._isInitialized,
+        orElse: () => _activeManagers.first,
+      );
+      
+      // Guardar estado inicial
+      _lastKnownOnlineState = initializedManager._connectivity.isOnline;
+      
+      // Escuchar cambios de conectividad
+      _connectivitySubscription = initializedManager._connectivity.connectivityStream.listen((isOnline) async {
+        // Detectar reconexión (de offline a online)
+        if (isOnline && !_lastKnownOnlineState) {
+          print('🔄 Auto-sync: conexión recuperada, sincronizando...');
+          await syncAll();
+        }
+        _lastKnownOnlineState = isOnline;
+      });
+    });
+  }
+  
+  /// Detiene la sincronización automática
+  static void disposeAutoSync() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
+    _autoSyncInitialized = false;
+    _lastKnownOnlineState = false;
   }
   
   /// Inicialización automática en background
@@ -346,6 +418,11 @@ class OnlineOfflineManager {
     _syncService.dispose();
     _connectivity.dispose();
     _storage.dispose();
+    
+    // Si no quedan managers activos, limpiar auto-sync
+    if (_activeManagers.isEmpty) {
+      disposeAutoSync();
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

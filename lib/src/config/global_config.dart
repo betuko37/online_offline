@@ -6,7 +6,7 @@ class GlobalConfig {
   static bool _isInitialized = false;
   
   // Configuración interna con valores sensatos (no expuesta al usuario)
-  static int _syncMinutes = 5;
+  static int _syncMinutes = 10;
   static int _pageSize = 50;
   static String _lastModifiedField = 'updatedAt';
   static bool _syncOnReconnect = true;

@@ -15,7 +15,7 @@ Una librería Flutter para manejar datos offline-first. **La API más simple pos
 
 ```yaml
 dependencies:
-  betuko_offline_sync: ^3.0.0
+  betuko_offline_sync: ^3.1.0
 ```
 
 ## 🔧 Uso Básico (3 pasos)
@@ -50,11 +50,37 @@ await reportes.save({
   'descripcion': 'Descripción',
 });
 
-// Sincronizar cuando el usuario quiera
+// Sincronizar cuando el usuario quiera (opcional - también es automático)
 await OnlineOfflineManager.syncAll();
 ```
 
 **¡Eso es todo!**
+
+## ⚡ Sincronización Automática
+
+La librería sincroniza automáticamente en dos situaciones:
+
+### 1. Sincronización Periódica (Cada 10 minutos)
+Cuando tu app está online, se ejecuta `syncAll()` automáticamente cada 10 minutos para mantener los datos actualizados.
+
+### 2. Sincronización al Reconectar
+Cuando la app detecta que se recuperó la conexión a internet (de offline a online), ejecuta `syncAll()` automáticamente para sincronizar cualquier dato pendiente.
+
+**¡No necesitas configurar nada!** Esto funciona automáticamente una vez que creas tu primer `OnlineOfflineManager`.
+
+```dart
+// Solo crea managers - el auto-sync comienza automáticamente
+final reportes = OnlineOfflineManager(
+  boxName: 'reportes',
+  endpoint: '/api/reportes',
+);
+
+// El auto-sync:
+// - Se ejecuta cada 10 minutos cuando hay internet
+// - Se ejecuta inmediatamente cuando se recupera la conexión
+```
+
+Puedes seguir llamando `syncAll()` manualmente cuando quieras forzar una sincronización.
 
 ## 💡 Filosofía
 
@@ -62,11 +88,13 @@ La librería sigue un principio simple:
 
 - **`get()`** → Siempre retorna datos locales (instantáneo)
 - **`syncAll()`** → El usuario decide cuándo actualizar
+- **Auto-sync** → Sincronización automática cada 10 minutos y al reconectar
 
 Esto significa que:
 1. Tu app SIEMPRE es rápida (datos locales)
-2. El usuario controla cuándo sincronizar
-3. Funciona offline perfectamente
+2. El usuario controla cuándo sincronizar (manual)
+3. La sincronización también es automática (cada 10 min y al reconectar)
+4. Funciona offline perfectamente
 
 ## 📱 Ejemplo Completo
 

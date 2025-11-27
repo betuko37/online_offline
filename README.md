@@ -11,6 +11,8 @@
 - 🚀 **Super Simple API** - Just `get()`, `save()`, `syncAll()`
 - 📱 **Always Fast** - `get()` always returns local data instantly
 - 🔄 **Manual Sync** - User decides when to sync with `syncAll()`
+- ⚡ **Auto Sync** - Automatically syncs every 10 minutes when online
+- 🔌 **Reconnection Sync** - Automatically syncs when internet connection is restored
 - 💾 **Auto Storage** - Uses Hive for persistent local storage
 - 📊 **Sync Status** - Know exactly what's synced and what's pending
 - 🔧 **Debug Tools** - Built-in debugging and reset utilities
@@ -19,7 +21,7 @@
 
 ```yaml
 dependencies:
-  betuko_offline_sync: ^3.0.0
+  betuko_offline_sync: ^3.1.0
 ```
 
 ```bash
@@ -66,6 +68,32 @@ await reports.save({
 // Sync with server (when user wants fresh data)
 await OnlineOfflineManager.syncAll();
 ```
+
+## ⚡ Automatic Synchronization
+
+The library automatically syncs your data in two scenarios:
+
+### 1. Periodic Sync (Every 10 minutes)
+When your app is online, `syncAll()` is automatically called every 10 minutes to keep your data fresh.
+
+### 2. Reconnection Sync
+When the app detects that internet connection is restored (from offline to online), it automatically triggers `syncAll()` to sync any pending data.
+
+**No configuration needed!** This works automatically once you create your first `OnlineOfflineManager`.
+
+```dart
+// Just create managers - auto-sync starts automatically!
+final reports = OnlineOfflineManager(
+  boxName: 'reports',
+  endpoint: '/api/reports',
+);
+
+// Auto-sync will:
+// - Run every 10 minutes when online
+// - Run immediately when connection is restored
+```
+
+You can still call `syncAll()` manually anytime you want to force a sync.
 
 ## 📖 API Reference
 

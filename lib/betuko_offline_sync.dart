@@ -26,6 +26,8 @@
 /// - `get()` always returns local data instantly
 /// - `syncAll()` syncs all managers with server
 /// - User controls when to sync
+/// - **Auto-sync**: Automatically syncs every 10 minutes when online
+/// - **Reconnection sync**: Automatically syncs when internet connection is restored
 ///
 /// ## Check Sync Status
 ///

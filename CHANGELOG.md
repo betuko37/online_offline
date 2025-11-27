@@ -5,6 +5,33 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2025-01-XX
+
+### ✨ **Nuevas Características**
+
+#### Sincronización Automática
+- **Sincronización Periódica**: Se ejecuta automáticamente cada 10 minutos cuando hay conexión a internet
+- **Sincronización al Reconectar**: Se ejecuta automáticamente cuando se detecta que la conexión a internet se ha restaurado (de offline a online)
+- **Sin Configuración Necesaria**: Funciona automáticamente una vez que se crea el primer `OnlineOfflineManager`
+- **Intervalo Configurable**: El intervalo de sincronización se puede ajustar en `GlobalConfig.syncMinutes` (por defecto 10 minutos)
+
+#### Detalles Técnicos
+- Timer periódico que ejecuta `syncAll()` cada 10 minutos cuando hay internet
+- Listener de conectividad que detecta cambios de estado de red
+- Sincronización automática al detectar reconexión (transición de offline a online)
+- Limpieza automática de recursos cuando no hay managers activos
+
+### 📝 **Documentación**
+
+- Documentación actualizada en `README.md` y `README_SUPER_SIMPLE.md` con información sobre sincronización automática
+- Ejemplos de uso de la sincronización automática agregados
+
+### 🔧 **Cambios Internos**
+
+- `GlobalConfig.syncMinutes` cambiado de 5 a 10 minutos por defecto
+- Agregado sistema de auto-sync con timer y listener de conectividad en `OnlineOfflineManager`
+- Método `disposeAutoSync()` agregado para limpieza de recursos
+
 ## [3.0.0] - 2025-11-26
 
 ### 🚀 **MAJOR RELEASE - API Simplificada**
