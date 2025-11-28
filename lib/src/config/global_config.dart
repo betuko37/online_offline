@@ -18,6 +18,10 @@ class GlobalConfig {
   static int _maxDaysToKeep = 30;
   static int _maxPagesPerSync = 20;
   
+  // Configuración de reconexión
+  static int _reconnectDelaySeconds = 3; // Delay antes de sincronizar al reconectar
+  static bool _verifyRealConnection = true; // Verificar conexión real con HTTP
+  
   // Claves para SharedPreferences
   static const String _prefsPrefix = 'betuko_offline_sync_';
   static const String _prefsBaseUrl = '${_prefsPrefix}base_url';
@@ -41,14 +45,22 @@ class GlobalConfig {
   ///   enableBackgroundSync: true,
   /// );
   /// ```
+  /// 
+  /// Parámetros opcionales:
+  /// - `reconnectDelaySeconds`: Segundos a esperar antes de sincronizar al reconectar (default: 3)
+  /// - `verifyRealConnection`: Si verificar conexión real con HTTP antes de sincronizar (default: true)
   static Future<void> init({
     required String baseUrl,
     required String token,
     bool enableBackgroundSync = false,
+    int reconnectDelaySeconds = 3,
+    bool verifyRealConnection = true,
   }) async {
     _baseUrl = baseUrl;
     _token = token;
     _enableBackgroundSync = enableBackgroundSync;
+    _reconnectDelaySeconds = reconnectDelaySeconds;
+    _verifyRealConnection = verifyRealConnection;
     _isInitialized = true;
     
     // Guardar en SharedPreferences para background sync
@@ -88,6 +100,10 @@ class GlobalConfig {
   static int get maxLocalRecords => _maxLocalRecords;
   static int get maxDaysToKeep => _maxDaysToKeep;
   static int get maxPagesPerSync => _maxPagesPerSync;
+  
+  // Getters de reconexión
+  static int get reconnectDelaySeconds => _reconnectDelaySeconds;
+  static bool get verifyRealConnection => _verifyRealConnection;
 
   /// Actualizar solo el token sin resetear toda la configuración
   /// 
@@ -170,6 +186,8 @@ class GlobalConfig {
     _maxDaysToKeep = 30;
     _maxPagesPerSync = 20;
     _enableBackgroundSync = false;
+    _reconnectDelaySeconds = 3;
+    _verifyRealConnection = true;
     _isInitialized = false;
     
     if (clearPrefs) {
@@ -191,6 +209,8 @@ class GlobalConfig {
     _maxDaysToKeep = 30;
     _maxPagesPerSync = 20;
     _enableBackgroundSync = false;
+    _reconnectDelaySeconds = 3;
+    _verifyRealConnection = true;
     _isInitialized = false;
   }
 }

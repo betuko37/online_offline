@@ -122,12 +122,44 @@ class OnlineOfflineManager {
       _connectivitySubscription = initializedManager._connectivity.connectivityStream.listen((isOnline) async {
         // Detectar reconexión (de offline a online)
         if (isOnline && !_lastKnownOnlineState) {
-          print('🔄 Auto-sync: conexión recuperada, sincronizando...');
-          await syncAll();
+          await _handleReconnection();
         }
         _lastKnownOnlineState = isOnline;
       });
     });
+  }
+  
+  /// Maneja la reconexión con delay y verificación de conexión real
+  static Future<void> _handleReconnection() async {
+    final delaySeconds = GlobalConfig.reconnectDelaySeconds;
+    final verifyReal = GlobalConfig.verifyRealConnection;
+    
+    print('🔄 Auto-sync: conexión detectada, esperando ${delaySeconds}s para estabilizar...');
+    
+    // Esperar a que la conexión se estabilice
+    await Future.delayed(Duration(seconds: delaySeconds));
+    
+    // Verificar conexión real si está habilitado
+    if (verifyReal) {
+      print('🔍 Verificando conexión real...');
+      final hasReal = await ConnectivityService.hasRealConnection();
+      
+      if (!hasReal) {
+        print('⚠️ Auto-sync: conexión no estable, reintentando en ${delaySeconds}s...');
+        // Reintentar una vez más
+        await Future.delayed(Duration(seconds: delaySeconds));
+        final hasRealRetry = await ConnectivityService.hasRealConnection();
+        
+        if (!hasRealRetry) {
+          print('❌ Auto-sync: no hay conexión real a internet, cancelando sync');
+          return;
+        }
+      }
+      print('✅ Conexión real verificada');
+    }
+    
+    print('🔄 Auto-sync: conexión recuperada, sincronizando...');
+    await syncAll();
   }
   
   /// Detiene la sincronización automática

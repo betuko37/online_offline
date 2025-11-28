@@ -5,6 +5,57 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2025-11-28
+
+### 🐛 **Corrección de Bug**
+
+#### Sincronización más confiable al reconectar
+Se corrigió un problema donde la sincronización al reconectar fallaba porque `connectivity_plus` detectaba la conexión antes de que estuviera realmente disponible.
+
+### ✨ **Mejoras**
+
+#### Verificación de conexión real
+- Nuevo método `ConnectivityService.hasRealConnection()` que hace un ping HTTP real para verificar conectividad
+- Se usa Google's generate_204 endpoint con fallback a Cloudflare
+
+#### Delay configurable antes de sincronizar
+- Nuevo parámetro `reconnectDelaySeconds` en `GlobalConfig.init()` (default: 3 segundos)
+- Permite que la conexión se estabilice antes de intentar sincronizar
+
+#### Verificación opcional de conexión real
+- Nuevo parámetro `verifyRealConnection` en `GlobalConfig.init()` (default: true)
+- Si la verificación falla, reintenta una vez más antes de cancelar
+
+### 📖 **Uso**
+
+```dart
+// Configuración por defecto (recomendada)
+await GlobalConfig.init(
+  baseUrl: 'https://api.com',
+  token: 'tu-token',
+);
+
+// Personalizar el comportamiento de reconexión
+await GlobalConfig.init(
+  baseUrl: 'https://api.com',
+  token: 'tu-token',
+  reconnectDelaySeconds: 5,     // Esperar 5 segundos (default: 3)
+  verifyRealConnection: true,   // Verificar conexión real (default: true)
+);
+```
+
+### 📝 **Logs mejorados**
+
+Ahora se muestra información clara sobre el proceso de reconexión:
+```
+🔄 Auto-sync: conexión detectada, esperando 3s para estabilizar...
+🔍 Verificando conexión real...
+✅ Conexión real verificada
+🔄 Auto-sync: conexión recuperada, sincronizando...
+```
+
+---
+
 ## [3.2.0] - 2025-11-28
 
 ### ✨ **Nueva Característica Principal**
