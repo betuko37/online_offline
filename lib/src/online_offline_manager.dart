@@ -142,16 +142,26 @@ class OnlineOfflineManager {
     // Verificar conexión real si está habilitado
     if (verifyReal) {
       print('🔍 Verificando conexión real...');
-      final hasReal = await ConnectivityService.hasRealConnection();
+      
+      // Usar la API del usuario como primer endpoint de verificación
+      final customUrl = GlobalConfig.baseUrl;
+      final hasReal = await ConnectivityService.hasRealConnection(
+        customUrl: customUrl,
+        timeout: const Duration(seconds: 10),
+      );
       
       if (!hasReal) {
         print('⚠️ Auto-sync: conexión no estable, reintentando en ${delaySeconds}s...');
-        // Reintentar una vez más
+        // Reintentar una vez más con timeout más largo
         await Future.delayed(Duration(seconds: delaySeconds));
-        final hasRealRetry = await ConnectivityService.hasRealConnection();
+        final hasRealRetry = await ConnectivityService.hasRealConnection(
+          customUrl: customUrl,
+          timeout: const Duration(seconds: 15),
+        );
         
         if (!hasRealRetry) {
           print('❌ Auto-sync: no hay conexión real a internet, cancelando sync');
+          print('💡 Tip: Si crees que tienes internet, intenta sincronizar manualmente');
           return;
         }
       }

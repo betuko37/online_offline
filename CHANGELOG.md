@@ -5,6 +5,25 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.2] - 2025-11-28
+
+### 🐛 **Corrección de Bug**
+
+#### Verificación de conexión más robusta
+- Se agregaron múltiples endpoints de verificación para redes que bloquean Google/Cloudflare
+- Ahora usa la API del usuario como primer endpoint de verificación
+- Timeouts más largos para conexiones lentas
+
+#### Endpoints de verificación (en orden):
+1. API del usuario (baseUrl configurado)
+2. Google connectivity check (gstatic)
+3. Google generate_204
+4. Apple captive portal
+5. Cloudflare 1.1.1.1
+6. Google DNS
+
+---
+
 ## [3.2.1] - 2025-11-28
 
 ### 🐛 **Corrección de Bug**

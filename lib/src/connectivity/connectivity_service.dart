@@ -26,25 +26,49 @@ class ConnectivityService {
   /// Esto es más confiable que `connectivity_plus` que solo verifica
   /// si hay una interfaz de red activa, no si realmente hay internet.
   /// 
+  /// Intenta múltiples endpoints en orden:
+  /// 1. La API configurada del usuario (si está disponible)
+  /// 2. Google generate_204
+  /// 3. Cloudflare
+  /// 4. Apple captive portal
+  /// 
   /// Retorna true si hay conexión real, false si no.
-  static Future<bool> hasRealConnection({Duration? timeout}) async {
-    try {
-      final response = await http.get(
-        Uri.parse('https://www.google.com/generate_204'),
-      ).timeout(timeout ?? const Duration(seconds: 5));
-      
-      // Google devuelve 204 No Content si hay conexión
-      return response.statusCode == 204 || response.statusCode == 200;
-    } catch (e) {
-      // Intentar con un fallback
+  static Future<bool> hasRealConnection({Duration? timeout, String? customUrl}) async {
+    final effectiveTimeout = timeout ?? const Duration(seconds: 8);
+    
+    // Lista de endpoints a probar (en orden de preferencia)
+    final endpoints = <String>[
+      if (customUrl != null && customUrl.isNotEmpty) customUrl,
+      'https://connectivitycheck.gstatic.com/generate_204', // Google (más confiable)
+      'https://www.google.com/generate_204',
+      'https://captive.apple.com/hotspot-detect.html', // Apple
+      'https://1.1.1.1/', // Cloudflare DNS
+    ];
+    
+    for (final url in endpoints) {
       try {
-        final response = await http.head(
-          Uri.parse('https://cloudflare.com'),
-        ).timeout(timeout ?? const Duration(seconds: 5));
-        return response.statusCode >= 200 && response.statusCode < 400;
-      } catch (_) {
-        return false;
+        final response = await http.get(
+          Uri.parse(url),
+        ).timeout(effectiveTimeout);
+        
+        // Cualquier respuesta exitosa indica conexión
+        if (response.statusCode >= 200 && response.statusCode < 400) {
+          return true;
+        }
+      } catch (e) {
+        // Continuar con el siguiente endpoint
+        continue;
       }
+    }
+    
+    // Si todos fallan, intentar un último método: DNS lookup simulado
+    try {
+      final response = await http.head(
+        Uri.parse('https://dns.google/'),
+      ).timeout(effectiveTimeout);
+      return response.statusCode >= 200 && response.statusCode < 400;
+    } catch (_) {
+      return false;
     }
   }
 
