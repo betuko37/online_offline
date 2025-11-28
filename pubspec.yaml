@@ -1,6 +1,6 @@
 name: betuko_offline_sync
 description: "Ultra-simple offline-first Flutter package. Just get(), save(), and syncAll(). Automatic local storage with Hive, manual sync when you want."
-version: 3.1.0
+version: 3.2.0
 homepage: https://github.com/betuko37/online_offline
 repository: https://github.com/betuko37/online_offline
 issue_tracker: https://github.com/betuko37/online_offline/issues
@@ -11,7 +11,7 @@ topics:
   - sync
   - hive
   - local-storage
-  - cache
+  - background-sync
 
 environment:
   sdk: ^3.8.1
@@ -25,6 +25,8 @@ dependencies:
   http: ^1.2.0
   connectivity_plus: ^6.0.5
   path_provider: ^2.1.0
+  workmanager: ^0.9.0+3
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:

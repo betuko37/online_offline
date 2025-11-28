@@ -5,7 +5,93 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.1.0] - 2025-01-XX
+## [3.2.0] - 2025-11-28
+
+### ✨ **Nueva Característica Principal**
+
+#### 🌙 Background Sync con WorkManager (Android)
+Ahora puedes sincronizar datos incluso cuando la app está completamente cerrada usando WorkManager.
+
+##### Características:
+- **Sincronización Periódica**: Cada 15 minutos (mínimo permitido por Android)
+- **Sincronización al Reconectar**: Se ejecuta automáticamente cuando hay conexión disponible
+- **Persistencia de Configuración**: La configuración se guarda en SharedPreferences para el background isolate
+- **Fácil Integración**: Solo requiere llamar a `BackgroundSyncService.initialize()`
+
+##### Uso Básico:
+```dart
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Configurar con background sync habilitado
+  await GlobalConfig.init(
+    baseUrl: 'https://api.com',
+    token: 'tu-token',
+    enableBackgroundSync: true,
+  );
+  
+  // Inicializar WorkManager
+  await BackgroundSyncService.initialize();
+  
+  // Crear y registrar managers
+  final reportes = OnlineOfflineManager(
+    boxName: 'reportes',
+    endpoint: '/api/reportes',
+  );
+  await BackgroundSyncService.registerManager(reportes);
+  
+  // Iniciar sync periódico
+  await BackgroundSyncService.startPeriodicSync();
+  
+  runApp(MyApp());
+}
+```
+
+### 🆕 **Nuevas Clases y Métodos**
+
+#### BackgroundSyncService
+| Método | Descripción |
+|--------|-------------|
+| `initialize()` | Inicializa WorkManager |
+| `registerManager(manager)` | Registra un manager para background sync |
+| `unregisterManager(boxName)` | Desregistra un manager |
+| `startPeriodicSync()` | Inicia sync cada 15 minutos |
+| `syncWhenConnected()` | Programa sync cuando haya internet |
+| `stopPeriodicSync()` | Detiene sync periódico |
+| `cancelAll()` | Cancela todas las tareas |
+| `clearConfig()` | Limpia configuración (para logout) |
+
+#### GlobalConfig Actualizado
+- `init()` ahora es `async` y acepta `enableBackgroundSync`
+- Nuevo método `initSync()` para inicialización síncrona
+- Nuevo método `saveForBackgroundSync()` 
+- Nuevo método `loadFromPrefs()`
+- `updateToken()` ahora es `async` y actualiza SharedPreferences
+
+### 📦 **Nuevas Dependencias**
+- `workmanager: ^0.9.0+3` - Para tareas en background
+- `shared_preferences: ^2.2.2` - Para persistir configuración
+
+### 📝 **Configuración Android Requerida**
+
+Agregar en `android/app/src/main/AndroidManifest.xml`:
+```xml
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+```
+
+### ⚠️ **Limitaciones**
+- **Solo Android**: iOS tiene restricciones más estrictas para background tasks
+- **Intervalo mínimo**: 15 minutos (limitación de Android WorkManager)
+- **Batería**: Android puede demorar la ejecución para optimizar batería
+
+### 📚 **Documentación**
+- README.md actualizado con sección completa de Background Sync
+- Ejemplos de configuración y uso
+- Notas sobre logout y limpieza
+
+---
+
+## [3.1.0] - 2025-11-26
 
 ### ✨ **Nuevas Características**
 

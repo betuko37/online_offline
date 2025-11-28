@@ -4,18 +4,26 @@
 ///
 /// ```dart
 /// // 1. Configure once at app start
-/// GlobalConfig.init(
+/// await GlobalConfig.init(
 ///   baseUrl: 'https://your-api.com',
 ///   token: 'your-token',
+///   enableBackgroundSync: true, // Enable background sync (Android only)
 /// );
 ///
-/// // 2. Create a manager
+/// // 2. Initialize background sync (optional, Android only)
+/// await BackgroundSyncService.initialize();
+///
+/// // 3. Create a manager
 /// final reports = OnlineOfflineManager(
 ///   boxName: 'reports',
 ///   endpoint: '/api/reports',
 /// );
 ///
-/// // 3. Use it!
+/// // 4. Register for background sync
+/// await BackgroundSyncService.registerManager(reports);
+/// await BackgroundSyncService.startPeriodicSync();
+///
+/// // 5. Use it!
 /// final data = await reports.get();     // Always returns local data (instant)
 /// await reports.save({'title': 'New'}); // Save locally
 /// await OnlineOfflineManager.syncAll(); // Sync when user wants
@@ -28,6 +36,7 @@
 /// - User controls when to sync
 /// - **Auto-sync**: Automatically syncs every 10 minutes when online
 /// - **Reconnection sync**: Automatically syncs when internet connection is restored
+/// - **Background sync**: Syncs every 15 minutes even when app is closed (Android)
 ///
 /// ## Check Sync Status
 ///
@@ -68,3 +77,10 @@ export 'src/utils/hive_utils.dart';
 
 // Cache manager
 export 'src/cache/cache_manager.dart';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKGROUND SYNC (Android only)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Background sync service using WorkManager
+export 'src/background/background_sync_service.dart';

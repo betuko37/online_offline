@@ -13,6 +13,7 @@
 - 🔄 **Manual Sync** - User decides when to sync with `syncAll()`
 - ⚡ **Auto Sync** - Automatically syncs every 10 minutes when online
 - 🔌 **Reconnection Sync** - Automatically syncs when internet connection is restored
+- 🌙 **Background Sync** - Syncs every 15 min even when app is closed (Android)
 - 💾 **Auto Storage** - Uses Hive for persistent local storage
 - 📊 **Sync Status** - Know exactly what's synced and what's pending
 - 🔧 **Debug Tools** - Built-in debugging and reset utilities
@@ -94,6 +95,159 @@ final reports = OnlineOfflineManager(
 ```
 
 You can still call `syncAll()` manually anytime you want to force a sync.
+
+## 🌙 Background Sync (Android)
+
+Sync your data even when the app is completely closed using WorkManager.
+
+### Setup
+
+#### 1. Add Android Permission
+
+In `android/app/src/main/AndroidManifest.xml`, add:
+
+```xml
+<manifest ...>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    
+    <application ...>
+        <!-- Your app content -->
+    </application>
+</manifest>
+```
+
+#### 2. Initialize in main()
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:betuko_offline_sync/betuko_offline_sync.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize config with background sync enabled
+  await GlobalConfig.init(
+    baseUrl: 'https://your-api.com',
+    token: 'your-token',
+    enableBackgroundSync: true,
+  );
+  
+  // Initialize WorkManager
+  await BackgroundSyncService.initialize();
+  
+  runApp(MyApp());
+}
+```
+
+#### 3. Register Managers and Start Background Sync
+
+```dart
+// Create your managers
+final reports = OnlineOfflineManager(
+  boxName: 'reports',
+  endpoint: '/api/reports',
+);
+
+final users = OnlineOfflineManager(
+  boxName: 'users', 
+  endpoint: '/api/users',
+);
+
+// Register them for background sync
+await BackgroundSyncService.registerManager(reports);
+await BackgroundSyncService.registerManager(users);
+
+// Start periodic sync (every 15 minutes)
+await BackgroundSyncService.startPeriodicSync();
+
+// Or schedule a sync when internet becomes available
+await BackgroundSyncService.syncWhenConnected();
+```
+
+### Background Sync API
+
+| Method | Description |
+|--------|-------------|
+| `initialize()` | Initialize WorkManager (call once in main) |
+| `registerManager(manager)` | Register a manager for background sync |
+| `unregisterManager(boxName)` | Unregister a manager |
+| `startPeriodicSync()` | Start periodic sync (every 15 min) |
+| `syncWhenConnected()` | Schedule sync when internet is available |
+| `stopPeriodicSync()` | Stop periodic sync |
+| `cancelAll()` | Cancel all background tasks |
+| `clearConfig()` | Clear saved config (call on logout) |
+
+### Important Notes
+
+- **Android Only**: Background sync uses WorkManager which is only available on Android
+- **Minimum Interval**: Android enforces a minimum of 15 minutes for periodic tasks
+- **Battery Optimization**: Android may delay execution to optimize battery (Doze mode)
+- **Logout**: Call `BackgroundSyncService.clearConfig()` when user logs out
+
+### Complete Example with Background Sync
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:betuko_offline_sync/betuko_offline_sync.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  await GlobalConfig.init(
+    baseUrl: 'https://api.example.com',
+    token: 'your-token',
+    enableBackgroundSync: true,
+  );
+  
+  await BackgroundSyncService.initialize();
+  
+  runApp(MyApp());
+}
+
+class MyApp extends StatefulWidget {
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late OnlineOfflineManager reports;
+  
+  @override
+  void initState() {
+    super.initState();
+    _initManagers();
+  }
+  
+  Future<void> _initManagers() async {
+    reports = OnlineOfflineManager(
+      boxName: 'reports',
+      endpoint: '/api/reports',
+    );
+    
+    // Register for background sync
+    await BackgroundSyncService.registerManager(reports);
+    await BackgroundSyncService.startPeriodicSync();
+  }
+  
+  Future<void> _logout() async {
+    // Stop background sync and clear config
+    await BackgroundSyncService.cancelAll();
+    await BackgroundSyncService.clearConfig();
+    await GlobalConfig.clear();
+    await OnlineOfflineManager.resetAll();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: Text('Background Sync Demo')),
+        body: Center(child: Text('Your app here')),
+      ),
+    );
+  }
+}
+```
 
 ## 📖 API Reference
 
