@@ -19,7 +19,7 @@ class GlobalConfig {
   static int _maxPagesPerSync = 20;
   
   // Configuración de reconexión
-  static int _reconnectDelaySeconds = 3; // Delay antes de sincronizar al reconectar
+  static int _reconnectDelaySeconds = 5; // Delay antes de sincronizar al reconectar (aumentado a 5s)
   static bool _verifyRealConnection = true; // Verificar conexión real con HTTP
   
   // Claves para SharedPreferences

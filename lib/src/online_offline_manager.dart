@@ -86,47 +86,51 @@ class OnlineOfflineManager {
     if (_autoSyncInitialized) return;
     _autoSyncInitialized = true;
     
+    print('🔄 [AutoSync] Inicializando sincronización automática...');
+    
     // Timer periódico cada 10 minutos
     final syncInterval = Duration(minutes: GlobalConfig.syncMinutes);
     _autoSyncTimer = Timer.periodic(syncInterval, (_) async {
       // Solo sincronizar si hay managers activos y hay internet
       if (_activeManagers.isEmpty) return;
       
-      final anyOnline = _activeManagers.any((m) => m._isInitialized && m._connectivity.isOnline);
-      if (anyOnline) {
+      // Usar el estado global de conectividad
+      if (ConnectivityService.globalIsOnline) {
         print('🔄 Auto-sync: ejecutando sincronización periódica (cada ${GlobalConfig.syncMinutes} min)...');
         await syncAll();
       }
     });
     
     // Escuchar cambios de conectividad para sync al reconectar
+    // No esperamos aquí para no bloquear la inicialización
     _setupConnectivityListener();
+    
+    print('✅ [AutoSync] Sincronización automática inicializada');
   }
   
   /// Configura el listener de conectividad para sync al reconectar
-  static void _setupConnectivityListener() {
-    // Esperar a que haya al menos un manager inicializado
-    Future.delayed(const Duration(seconds: 2), () {
-      if (_activeManagers.isEmpty) return;
+  static Future<void> _setupConnectivityListener() async {
+    print('🔌 [AutoSync] Configurando listener de conectividad...');
+    
+    // Inicializar el servicio de conectividad global
+    await ConnectivityService.initializeGlobal();
+    
+    // Guardar estado inicial
+    _lastKnownOnlineState = ConnectivityService.globalIsOnline;
+    print('🔌 [AutoSync] Estado inicial: ${_lastKnownOnlineState ? "online" : "offline"}');
+    
+    // Escuchar cambios de conectividad usando el stream GLOBAL
+    _connectivitySubscription = ConnectivityService.globalConnectivityStream.listen((isOnline) async {
+      print('🔌 [AutoSync] Cambio detectado: ${isOnline ? "online" : "offline"} (anterior: ${_lastKnownOnlineState ? "online" : "offline"})');
       
-      // Buscar un manager inicializado para usar su connectivity stream
-      final initializedManager = _activeManagers.firstWhere(
-        (m) => m._isInitialized,
-        orElse: () => _activeManagers.first,
-      );
-      
-      // Guardar estado inicial
-      _lastKnownOnlineState = initializedManager._connectivity.isOnline;
-      
-      // Escuchar cambios de conectividad
-      _connectivitySubscription = initializedManager._connectivity.connectivityStream.listen((isOnline) async {
-        // Detectar reconexión (de offline a online)
-        if (isOnline && !_lastKnownOnlineState) {
-          await _handleReconnection();
-        }
-        _lastKnownOnlineState = isOnline;
-      });
+      // Detectar reconexión (de offline a online)
+      if (isOnline && !_lastKnownOnlineState) {
+        await _handleReconnection();
+      }
+      _lastKnownOnlineState = isOnline;
     });
+    
+    print('✅ [AutoSync] Listener de conectividad configurado');
   }
   
   /// Maneja la reconexión con delay y verificación de conexión real
@@ -525,7 +529,8 @@ class OnlineOfflineManager {
         return;
       }
       
-      if (!manager._connectivity.isOnline) {
+      // Usar estado global de conectividad
+      if (!ConnectivityService.globalIsOnline) {
         results[manager.boxName] = SyncResult(
           success: false,
           error: 'Sin conexión a internet',

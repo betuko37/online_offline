@@ -66,9 +66,9 @@ class ApiClient {
     return jsonData;
   }
 
-  /// Envía datos al servidor (POST)
+  /// Envía datos al servidor (POST) con reintentos automáticos
   Future<ApiResponse> post(String endpoint, Map<String, dynamic> data) async {
-    try {
+    return _executeWithRetry(() async {
       final url = _buildFullUrl(endpoint);
       
       final response = await http.post(
@@ -78,24 +78,13 @@ class ApiClient {
       ).timeout(_timeout);
       
       return ApiResponse._fromHttpResponse(response, autoExtractData: false);
-    } on TimeoutException {
-      return ApiResponse._error('Timeout: La petición tardó demasiado', isTimeout: true);
-    } catch (e) {
-      // Verificar si es un error de conexión
-      final errorStr = e.toString().toLowerCase();
-      if (errorStr.contains('failed host lookup') || 
-          errorStr.contains('socketexception') ||
-          errorStr.contains('network is unreachable')) {
-        return ApiResponse._error('Sin conexión: No se puede conectar al servidor', isNetworkError: true);
-      }
-      return ApiResponse._error('Error en POST: $e');
-    }
+    }, method: 'POST');
   }
 
-  /// Obtiene datos del servidor (GET)
+  /// Obtiene datos del servidor (GET) con reintentos automáticos
   /// Detecta automáticamente respuestas anidadas {data: [...]}
   Future<ApiResponse> get(String endpoint) async {
-    try {
+    return _executeWithRetry(() async {
       final url = _buildFullUrl(endpoint);
       
       final response = await http.get(
@@ -104,17 +93,47 @@ class ApiClient {
       ).timeout(_timeout);
       
       return ApiResponse._fromHttpResponse(response, autoExtractData: true);
-    } on TimeoutException {
-      return ApiResponse._error('Timeout: La petición tardó demasiado', isTimeout: true);
-    } catch (e) {
-      // Verificar si es un error de conexión
-      final errorStr = e.toString().toLowerCase();
-      if (errorStr.contains('failed host lookup') || 
-          errorStr.contains('socketexception') ||
-          errorStr.contains('network is unreachable')) {
-        return ApiResponse._error('Sin conexión: No se puede conectar al servidor', isNetworkError: true);
+    }, method: 'GET');
+  }
+
+  /// Ejecuta una petición con política de reintentos (Exponential Backoff)
+  Future<ApiResponse> _executeWithRetry(
+    Future<ApiResponse> Function() requestFn, {
+    required String method,
+    int maxRetries = 3,
+  }) async {
+    int attempts = 0;
+    
+    while (true) {
+      attempts++;
+      try {
+        return await requestFn();
+      } on TimeoutException {
+        if (attempts >= maxRetries) {
+          return ApiResponse._error('Timeout: La petición tardó demasiado', isTimeout: true);
+        }
+        print('⚠️ Timeout en $method (intento $attempts/$maxRetries). Reintentando...');
+      } catch (e) {
+        // Verificar si es un error de conexión recuperable
+        final errorStr = e.toString().toLowerCase();
+        final isNetworkError = errorStr.contains('failed host lookup') || 
+                             errorStr.contains('socketexception') ||
+                             errorStr.contains('network is unreachable') ||
+                             errorStr.contains('connection refused');
+                             
+        if (!isNetworkError || attempts >= maxRetries) {
+          if (isNetworkError) {
+             return ApiResponse._error('Sin conexión: No se puede conectar al servidor ($e)', isNetworkError: true);
+          }
+          return ApiResponse._error('Error en $method: $e');
+        }
+        
+        print('⚠️ Error de red en $method (intento $attempts/$maxRetries): $e');
+        print('🔄 Reintentando en ${attempts * 2} segundos...');
       }
-      return ApiResponse._error('Error en GET: $e');
+      
+      // Exponential backoff: esperar 2s, 4s, 6s...
+      await Future.delayed(Duration(seconds: attempts * 2));
     }
   }
 }

@@ -29,35 +29,45 @@ class BackgroundSyncTasks {
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    // Usar print en lugar de debugPrint para que aparezca en logcat incluso con app cerrada
+    final timestamp = DateTime.now().toIso8601String();
+    print('═══════════════════════════════════════════════════════════');
+    print('🔄 [BackgroundSync] [$timestamp] Iniciando tarea: $task');
+    print('═══════════════════════════════════════════════════════════');
+    
     try {
-      debugPrint('🔄 [BackgroundSync] Iniciando tarea: $task');
-      
       // Inicializar Hive para el isolate de background
+      print('📦 [BackgroundSync] Inicializando Hive...');
       await Hive.initFlutter();
       
       // Leer configuración de SharedPreferences
+      print('📖 [BackgroundSync] Leyendo configuración...');
       final prefs = await SharedPreferences.getInstance();
       final baseUrl = prefs.getString(BackgroundSyncTasks.prefsBaseUrl);
       final token = prefs.getString(BackgroundSyncTasks.prefsToken);
       
       if (baseUrl == null || token == null) {
-        debugPrint('⚠️ [BackgroundSync] Configuración no encontrada');
+        print('❌ [BackgroundSync] Configuración no encontrada (baseUrl: ${baseUrl != null}, token: ${token != null})');
         return Future.value(false);
       }
+      print('✅ [BackgroundSync] Configuración cargada (baseUrl: ${baseUrl.substring(0, baseUrl.length > 30 ? 30 : baseUrl.length)}...)');
       
       // Leer endpoints y boxNames guardados
       final endpointsJson = prefs.getStringList(BackgroundSyncTasks.prefsEndpoints) ?? [];
       final boxNamesJson = prefs.getStringList(BackgroundSyncTasks.prefsBoxNames) ?? [];
       
       if (endpointsJson.isEmpty || boxNamesJson.isEmpty) {
-        debugPrint('⚠️ [BackgroundSync] No hay managers registrados');
+        print('❌ [BackgroundSync] No hay managers registrados (endpoints: ${endpointsJson.length}, boxes: ${boxNamesJson.length})');
         return Future.value(false);
       }
+      print('📋 [BackgroundSync] Managers encontrados: ${boxNamesJson.length}');
       
       // Inicializar GlobalConfig con los valores guardados
+      print('⚙️ [BackgroundSync] Inicializando GlobalConfig...');
       GlobalConfig.init(baseUrl: baseUrl, token: token);
       
       // Crear managers temporales para sincronizar
+      print('🔨 [BackgroundSync] Creando managers temporales...');
       final managers = <OnlineOfflineManager>[];
       for (int i = 0; i < boxNamesJson.length; i++) {
         final boxName = boxNamesJson[i];
@@ -68,26 +78,47 @@ void callbackDispatcher() {
             boxName: boxName,
             endpoint: endpoint,
           ));
+          print('   ✓ Manager creado: $boxName -> $endpoint');
         }
       }
       
       // Esperar inicialización de managers
+      print('⏳ [BackgroundSync] Esperando inicialización de managers...');
       await Future.delayed(const Duration(milliseconds: 500));
       
       // Ejecutar sincronización
+      print('🔄 [BackgroundSync] Ejecutando sincronización...');
+      final startTime = DateTime.now();
       final results = await OnlineOfflineManager.syncAll();
+      final duration = DateTime.now().difference(startTime);
       
       // Limpiar managers
+      print('🧹 [BackgroundSync] Limpiando managers...');
       for (final manager in managers) {
         manager.dispose();
       }
       
       final successCount = results.values.where((r) => r.success).length;
-      debugPrint('✅ [BackgroundSync] Completado: $successCount/${results.length} exitosos');
+      final failedCount = results.length - successCount;
+      print('═══════════════════════════════════════════════════════════');
+      print('✅ [BackgroundSync] Sincronización completada en ${duration.inSeconds}s');
+      print('   ✓ Exitosos: $successCount/${results.length}');
+      if (failedCount > 0) {
+        print('   ✗ Fallidos: $failedCount');
+        for (final entry in results.entries) {
+          if (!entry.value.success) {
+            print('      - ${entry.key}: ${entry.value.error}');
+          }
+        }
+      }
+      print('═══════════════════════════════════════════════════════════');
       
       return Future.value(true);
-    } catch (e) {
-      debugPrint('❌ [BackgroundSync] Error: $e');
+    } catch (e, stackTrace) {
+      print('═══════════════════════════════════════════════════════════');
+      print('❌ [BackgroundSync] ERROR: $e');
+      print('Stack trace: $stackTrace');
+      print('═══════════════════════════════════════════════════════════');
       return Future.value(false);
     }
   });

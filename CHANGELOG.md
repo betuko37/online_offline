@@ -5,6 +5,85 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.5] - 2025-11-28
+
+### ✨ **Mejora de Resiliencia**
+
+#### Reintentos Automáticos en Peticiones HTTP
+Ahora las peticiones HTTP (`get` y `post`) incluyen una política de reintentos automática (Exponential Backoff) para manejar errores transitorios de red, como fallos de resolución DNS justo después de reconectar.
+
+- **Reintentos:** Hasta 3 veces
+- **Delay:** Creciente (2s, 4s, 6s)
+- **Errores cubiertos:** `SocketException`, `TimeoutException`, `Failed host lookup`
+
+Esto soluciona el problema donde el dispositivo dice tener internet, pero el DNS tarda unos segundos en resolver la dirección de la API, causando que la sincronización falle prematuramente.
+
+---
+
+## [3.2.4] - 2025-11-28
+
+### 🐛 **Corrección de Bug**
+
+#### Fallback Optimista en Verificación de Conexión
+Si todos los pings HTTP fallan (por ejemplo, en redes corporativas restrictivas o emuladores con configuraciones DNS complejas) pero el sistema operativo reporta que hay una interfaz de red activa (WiFi/Datos), ahora **se asume que hay conexión**.
+
+Esto evita falsos negativos donde la app tiene internet pero los endpoints de verificación (Google/Cloudflare) están bloqueados o fallan por timeouts.
+
+#### Logs de Conectividad Mejorados
+Ahora se muestra exactamente qué endpoint está fallando y por qué en la consola.
+
+```
+🔍 [Connectivity] Verificando conexión real...
+   • Probando ping a: https://api.miapp.com
+   ⚠️ Falló ping a https://api.miapp.com: SocketException...
+   • Probando ping a: https://clients3.google.com/generate_204
+   ✅ Respuesta recibida (Status: 204)
+```
+
+#### Ajustes
+- Timeout por defecto aumentado a 8 segundos
+- Delay de reconexión por defecto aumentado a 5 segundos
+
+---
+
+## [3.2.3] - 2025-11-28
+
+### 🐛 **Corrección de Bug Crítico**
+
+#### ConnectivityService ahora es Singleton Global
+El problema era que cada `OnlineOfflineManager` creaba su propia instancia de `ConnectivityService`, y el listener de reconexión solo se suscribía a **uno** de ellos. Si había problemas de timing, los eventos de reconexión se perdían.
+
+**Solución:**
+- `ConnectivityService` ahora usa el patrón **Singleton**
+- Todos los managers comparten el mismo stream global de conectividad
+- Se eliminaron las condiciones de carrera
+- Logs detallados para debug
+
+### ✨ **Nuevos Métodos Estáticos**
+
+| Método | Descripción |
+|--------|-------------|
+| `ConnectivityService.initializeGlobal()` | Inicializa el servicio global |
+| `ConnectivityService.globalConnectivityStream` | Stream global de conectividad |
+| `ConnectivityService.globalIsOnline` | Estado global de conexión |
+| `ConnectivityService.forceCheck()` | Forzar verificación de conectividad |
+| `ConnectivityService.disposeGlobal()` | Liberar recursos globales |
+
+### 📝 **Logs Mejorados**
+
+Ahora se muestran logs detallados del flujo de conectividad:
+```
+🔌 [Connectivity] Inicializando servicio global...
+✅ [Connectivity] Servicio global inicializado. Online: true
+🔌 [AutoSync] Configurando listener de conectividad...
+🔌 [AutoSync] Estado inicial: online
+✅ [AutoSync] Listener de conectividad configurado
+🔌 [AutoSync] Cambio detectado: online (anterior: offline)
+🔄 Auto-sync: conexión detectada, esperando 3s para estabilizar...
+```
+
+---
+
 ## [3.2.2] - 2025-11-28
 
 ### 🐛 **Corrección de Bug**
