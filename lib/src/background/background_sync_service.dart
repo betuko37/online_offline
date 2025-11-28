@@ -1,10 +1,19 @@
 import 'dart:io';
+import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../config/global_config.dart';
 import '../online_offline_manager.dart';
+
+/// Log que funciona tanto en foreground como en background
+void _bgLog(String message) {
+  // Usar developer.log para que aparezca en logcat incluso en background
+  developer.log(message, name: 'BackgroundSync');
+  // También print para debug en foreground
+  debugPrint(message);
+}
 
 /// Constantes para las tareas de WorkManager
 class BackgroundSyncTasks {
@@ -20,107 +29,198 @@ class BackgroundSyncTasks {
   static const String prefsToken = '${_prefsPrefix}token';
   static const String prefsEndpoints = '${_prefsPrefix}endpoints';
   static const String prefsBoxNames = '${_prefsPrefix}box_names';
+  
 }
+
+/// Tipo de función para tareas personalizadas en background
+/// 
+/// La función debe retornar `true` si la tarea fue exitosa, `false` si falló.
+/// Recibe el baseUrl y token de la configuración guardada para que pueda
+/// hacer llamadas HTTP al backend.
+typedef CustomBackgroundTask = Future<bool> Function(String baseUrl, String token);
+
+/// Tipo de función para el callback de WorkManager
+typedef WorkManagerCallback = void Function();
 
 /// Callback principal para WorkManager - DEBE ser función top-level
 /// 
 /// Esta función se ejecuta en un isolate separado cuando WorkManager
 /// dispara una tarea en background.
+/// 
+/// NOTA: Este callback solo sincroniza los OnlineOfflineManagers.
+/// Para agregar lógica personalizada, usa initialize(customCallback: ...)
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    // Usar print en lugar de debugPrint para que aparezca en logcat incluso con app cerrada
-    final timestamp = DateTime.now().toIso8601String();
-    print('═══════════════════════════════════════════════════════════');
-    print('🔄 [BackgroundSync] [$timestamp] Iniciando tarea: $task');
-    print('═══════════════════════════════════════════════════════════');
+    final result = await executeBackgroundSync();
+    return result.success;
+  });
+}
+
+/// Ejecuta la sincronización en background
+/// 
+/// Esta función puede ser llamada desde cualquier callbackDispatcher personalizado.
+/// Sincroniza todos los OnlineOfflineManagers registrados.
+/// 
+/// Retorna [BackgroundSyncResult] con información de la sincronización.
+/// 
+/// ## Uso desde callback personalizado:
+/// ```dart
+/// @pragma('vm:entry-point')
+/// void myAppCallbackDispatcher() {
+///   Workmanager().executeTask((task, inputData) async {
+///     // 1. Sincronizar managers del paquete
+///     final result = await executeBackgroundSync();
+///     
+///     // 2. Tu lógica personalizada
+///     await miSincronizacionPersonalizada(result.baseUrl!, result.token!);
+///     
+///     return true;
+///   });
+/// }
+/// ```
+Future<BackgroundSyncResult> executeBackgroundSync() async {
+  final timestamp = DateTime.now().toIso8601String();
+  _bgLog('═══════════════════════════════════════════════════════════');
+  _bgLog('🔄 [BackgroundSync] [$timestamp] INICIANDO SINCRONIZACIÓN EN BACKGROUND');
+  _bgLog('═══════════════════════════════════════════════════════════');
+  
+  try {
+    // Inicializar Hive para el isolate de background
+    _bgLog('📦 Inicializando Hive...');
+    await Hive.initFlutter();
+    _bgLog('   ✓ Hive inicializado');
     
-    try {
-      // Inicializar Hive para el isolate de background
-      print('📦 [BackgroundSync] Inicializando Hive...');
-      await Hive.initFlutter();
-      
-      // Leer configuración de SharedPreferences
-      print('📖 [BackgroundSync] Leyendo configuración...');
-      final prefs = await SharedPreferences.getInstance();
-      final baseUrl = prefs.getString(BackgroundSyncTasks.prefsBaseUrl);
-      final token = prefs.getString(BackgroundSyncTasks.prefsToken);
-      
-      if (baseUrl == null || token == null) {
-        print('❌ [BackgroundSync] Configuración no encontrada (baseUrl: ${baseUrl != null}, token: ${token != null})');
-        return Future.value(false);
-      }
-      print('✅ [BackgroundSync] Configuración cargada (baseUrl: ${baseUrl.substring(0, baseUrl.length > 30 ? 30 : baseUrl.length)}...)');
-      
-      // Leer endpoints y boxNames guardados
-      final endpointsJson = prefs.getStringList(BackgroundSyncTasks.prefsEndpoints) ?? [];
-      final boxNamesJson = prefs.getStringList(BackgroundSyncTasks.prefsBoxNames) ?? [];
-      
-      if (endpointsJson.isEmpty || boxNamesJson.isEmpty) {
-        print('❌ [BackgroundSync] No hay managers registrados (endpoints: ${endpointsJson.length}, boxes: ${boxNamesJson.length})');
-        return Future.value(false);
-      }
-      print('📋 [BackgroundSync] Managers encontrados: ${boxNamesJson.length}');
-      
-      // Inicializar GlobalConfig con los valores guardados
-      print('⚙️ [BackgroundSync] Inicializando GlobalConfig...');
-      GlobalConfig.init(baseUrl: baseUrl, token: token);
-      
-      // Crear managers temporales para sincronizar
-      print('🔨 [BackgroundSync] Creando managers temporales...');
-      final managers = <OnlineOfflineManager>[];
-      for (int i = 0; i < boxNamesJson.length; i++) {
-        final boxName = boxNamesJson[i];
-        final endpoint = i < endpointsJson.length ? endpointsJson[i] : null;
-        
-        if (endpoint != null && endpoint.isNotEmpty) {
-          managers.add(OnlineOfflineManager(
-            boxName: boxName,
-            endpoint: endpoint,
-          ));
-          print('   ✓ Manager creado: $boxName -> $endpoint');
-        }
-      }
-      
-      // Esperar inicialización de managers
-      print('⏳ [BackgroundSync] Esperando inicialización de managers...');
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Ejecutar sincronización
-      print('🔄 [BackgroundSync] Ejecutando sincronización...');
-      final startTime = DateTime.now();
-      final results = await OnlineOfflineManager.syncAll();
-      final duration = DateTime.now().difference(startTime);
-      
-      // Limpiar managers
-      print('🧹 [BackgroundSync] Limpiando managers...');
-      for (final manager in managers) {
-        manager.dispose();
-      }
-      
-      final successCount = results.values.where((r) => r.success).length;
-      final failedCount = results.length - successCount;
-      print('═══════════════════════════════════════════════════════════');
-      print('✅ [BackgroundSync] Sincronización completada en ${duration.inSeconds}s');
-      print('   ✓ Exitosos: $successCount/${results.length}');
-      if (failedCount > 0) {
-        print('   ✗ Fallidos: $failedCount');
-        for (final entry in results.entries) {
-          if (!entry.value.success) {
-            print('      - ${entry.key}: ${entry.value.error}');
-          }
-        }
-      }
-      print('═══════════════════════════════════════════════════════════');
-      
-      return Future.value(true);
-    } catch (e, stackTrace) {
-      print('═══════════════════════════════════════════════════════════');
-      print('❌ [BackgroundSync] ERROR: $e');
-      print('Stack trace: $stackTrace');
-      print('═══════════════════════════════════════════════════════════');
-      return Future.value(false);
+    // Leer configuración de SharedPreferences
+    _bgLog('📖 Leyendo configuración de SharedPreferences...');
+    final prefs = await SharedPreferences.getInstance();
+    final baseUrl = prefs.getString(BackgroundSyncTasks.prefsBaseUrl);
+    final token = prefs.getString(BackgroundSyncTasks.prefsToken);
+    
+    _bgLog('   • baseUrl encontrado: ${baseUrl != null}');
+    _bgLog('   • token encontrado: ${token != null}');
+    
+    if (baseUrl == null || token == null) {
+      _bgLog('❌ ERROR: Configuración no encontrada');
+      _bgLog('   Asegúrate de llamar BackgroundSyncService.saveConfig() después de login');
+      return BackgroundSyncResult(success: false, error: 'Configuración no encontrada');
     }
+    _bgLog('   ✓ Configuración cargada: $baseUrl');
+    
+    // Leer endpoints y boxNames guardados
+    final endpointsJson = prefs.getStringList(BackgroundSyncTasks.prefsEndpoints) ?? [];
+    final boxNamesJson = prefs.getStringList(BackgroundSyncTasks.prefsBoxNames) ?? [];
+    
+    _bgLog('📋 Managers registrados:');
+    _bgLog('   • boxNames: $boxNamesJson');
+    _bgLog('   • endpoints: $endpointsJson');
+    
+    if (endpointsJson.isEmpty || boxNamesJson.isEmpty) {
+      _bgLog('⚠️ No hay managers registrados para sincronizar');
+      _bgLog('   Asegúrate de llamar BackgroundSyncService.registerManager()');
+      return BackgroundSyncResult(
+        success: true, 
+        baseUrl: baseUrl, 
+        token: token,
+        managersCount: 0,
+      );
+    }
+    
+    // Inicializar GlobalConfig con los valores guardados (SYNC, no async)
+    _bgLog('⚙️ Inicializando GlobalConfig...');
+    GlobalConfig.initSync(baseUrl: baseUrl, token: token);
+    _bgLog('   ✓ GlobalConfig inicializado');
+    
+    // Crear managers temporales para sincronizar
+    _bgLog('🔨 Creando ${boxNamesJson.length} managers temporales...');
+    final managers = <OnlineOfflineManager>[];
+    for (int i = 0; i < boxNamesJson.length; i++) {
+      final boxName = boxNamesJson[i];
+      final endpoint = i < endpointsJson.length ? endpointsJson[i] : null;
+      
+      if (endpoint != null && endpoint.isNotEmpty) {
+        _bgLog('   • Creando: $boxName -> $endpoint');
+        managers.add(OnlineOfflineManager(
+          boxName: boxName,
+          endpoint: endpoint,
+        ));
+      }
+    }
+    _bgLog('   ✓ ${managers.length} managers creados');
+    
+    // Esperar inicialización de managers (más tiempo en background)
+    _bgLog('⏳ Esperando inicialización de managers (1.5s)...');
+    await Future.delayed(const Duration(milliseconds: 1500));
+    
+    // Ejecutar sincronización de managers
+    _bgLog('🔄 EJECUTANDO SINCRONIZACIÓN...');
+    final startTime = DateTime.now();
+    final results = await OnlineOfflineManager.syncAll();
+    final duration = DateTime.now().difference(startTime);
+    
+    // Mostrar resultados detallados
+    _bgLog('📊 RESULTADOS:');
+    for (final entry in results.entries) {
+      if (entry.value.success) {
+        _bgLog('   ✓ ${entry.key}: ÉXITO');
+      } else {
+        _bgLog('   ✗ ${entry.key}: ERROR - ${entry.value.error}');
+      }
+    }
+    
+    // Limpiar managers
+    _bgLog('🧹 Limpiando managers...');
+    for (final manager in managers) {
+      manager.dispose();
+    }
+    
+    final successCount = results.values.where((r) => r.success).length;
+    final failedCount = results.length - successCount;
+    
+    _bgLog('═══════════════════════════════════════════════════════════');
+    _bgLog('✅ SINCRONIZACIÓN COMPLETADA en ${duration.inSeconds}s');
+    _bgLog('   • Exitosos: $successCount/${results.length}');
+    if (failedCount > 0) {
+      _bgLog('   • Fallidos: $failedCount');
+    }
+    _bgLog('═══════════════════════════════════════════════════════════');
+    
+    return BackgroundSyncResult(
+      success: true,
+      baseUrl: baseUrl,
+      token: token,
+      managersCount: managers.length,
+      successCount: successCount,
+      failedCount: failedCount,
+    );
+  } catch (e, stackTrace) {
+    _bgLog('═══════════════════════════════════════════════════════════');
+    _bgLog('❌ ERROR EN SINCRONIZACIÓN BACKGROUND');
+    _bgLog('   Error: $e');
+    _bgLog('   Stack: $stackTrace');
+    _bgLog('═══════════════════════════════════════════════════════════');
+    return BackgroundSyncResult(success: false, error: e.toString());
+  }
+}
+
+/// Resultado de la sincronización en background
+class BackgroundSyncResult {
+  final bool success;
+  final String? error;
+  final String? baseUrl;
+  final String? token;
+  final int managersCount;
+  final int successCount;
+  final int failedCount;
+  
+  BackgroundSyncResult({
+    required this.success,
+    this.error,
+    this.baseUrl,
+    this.token,
+    this.managersCount = 0,
+    this.successCount = 0,
+    this.failedCount = 0,
   });
 }
 
@@ -168,15 +268,38 @@ class BackgroundSyncService {
   /// Debe llamarse una vez al inicio de la app, después de
   /// `WidgetsFlutterBinding.ensureInitialized()`.
   /// 
-  /// Ejemplo:
+  /// ## Uso básico (solo sincroniza managers):
   /// ```dart
-  /// void main() async {
-  ///   WidgetsFlutterBinding.ensureInitialized();
-  ///   await BackgroundSyncService.initialize();
-  ///   runApp(MyApp());
+  /// await BackgroundSyncService.initialize();
+  /// ```
+  /// 
+  /// ## Uso con callback personalizado (para agregar lógica propia):
+  /// ```dart
+  /// await BackgroundSyncService.initialize(
+  ///   customCallback: myAppCallbackDispatcher,
+  /// );
+  /// ```
+  /// 
+  /// Donde `myAppCallbackDispatcher` es una función top-level:
+  /// ```dart
+  /// @pragma('vm:entry-point')
+  /// void myAppCallbackDispatcher() {
+  ///   Workmanager().executeTask((task, inputData) async {
+  ///     // Sincronizar managers del paquete
+  ///     final result = await executeBackgroundSync();
+  ///     
+  ///     // Tu lógica personalizada aquí
+  ///     if (result.success && result.baseUrl != null) {
+  ///       await miLogicaPersonalizada(result.baseUrl!, result.token!);
+  ///     }
+  ///     
+  ///     return true;
+  ///   });
   /// }
   /// ```
-  static Future<void> initialize() async {
+  static Future<void> initialize({
+    WorkManagerCallback? customCallback,
+  }) async {
     if (_isInitialized) return;
     
     // Solo inicializar en Android
@@ -185,13 +308,20 @@ class BackgroundSyncService {
       return;
     }
     
+    // Usar callback personalizado o el default
+    final callback = customCallback ?? callbackDispatcher;
+    
     await Workmanager().initialize(
-      callbackDispatcher,
+      callback,
       isInDebugMode: kDebugMode,
     );
     
     _isInitialized = true;
-    debugPrint('✅ [BackgroundSync] WorkManager inicializado');
+    if (customCallback != null) {
+      debugPrint('✅ [BackgroundSync] WorkManager inicializado con callback personalizado');
+    } else {
+      debugPrint('✅ [BackgroundSync] WorkManager inicializado');
+    }
   }
   
   /// Guarda la configuración actual para que el background task pueda accederla

@@ -5,6 +5,43 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.7] - 2025-11-28
+
+### 🐛 **Corrección de Bug Crítico**
+
+#### Logs de Background Sync ahora visibles en Logcat
+El problema era que cuando la app estaba completamente cerrada, los `print()` no aparecían en logcat. Ahora se usa `developer.log()` que siempre aparece.
+
+#### GlobalConfig.initSync() en Background
+Se corrigió el uso de `GlobalConfig.init()` (async) en el callback de background. Ahora usa `initSync()` que es síncrono y funciona correctamente en el isolate de WorkManager.
+
+#### Más tiempo de inicialización
+Se aumentó el tiempo de espera para inicialización de managers de 500ms a 1500ms para dar más tiempo en el isolate de background.
+
+#### Logs detallados
+Ahora se muestran logs paso a paso de todo el proceso de sincronización en background:
+```
+═══════════════════════════════════════════════════════════
+🔄 [BackgroundSync] INICIANDO SINCRONIZACIÓN EN BACKGROUND
+═══════════════════════════════════════════════════════════
+📦 Inicializando Hive...
+📖 Leyendo configuración de SharedPreferences...
+📋 Managers registrados:
+   • boxNames: [reportes, usuarios]
+   • endpoints: [/api/reportes, /api/usuarios]
+⚙️ Inicializando GlobalConfig...
+🔨 Creando 2 managers temporales...
+🔄 EJECUTANDO SINCRONIZACIÓN...
+📊 RESULTADOS:
+   ✓ reportes: ÉXITO
+   ✓ usuarios: ÉXITO
+═══════════════════════════════════════════════════════════
+✅ SINCRONIZACIÓN COMPLETADA en 3s
+═══════════════════════════════════════════════════════════
+```
+
+---
+
 ## [3.2.5] - 2025-11-28
 
 ### ✨ **Mejora de Resiliencia**
