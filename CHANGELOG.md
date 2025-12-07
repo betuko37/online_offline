@@ -5,6 +5,61 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2025-01-27
+
+### ✨ **Nuevas Características**
+
+#### Control de Upload (POST) por Manager
+Ahora puedes controlar qué managers hacen POST (subida) y cuáles solo hacen GET (descarga):
+
+```dart
+// Manager con POST habilitado (sube y descarga)
+final asistencias = OnlineOfflineManager(
+  boxName: 'asistencias',
+  endpoint: 'processes/payroll/daily-capture',
+  uploadEnabled: true, // ✅ Permite POST
+);
+
+// Manager solo lectura (solo descarga, no sube)
+final catalogos = OnlineOfflineManager(
+  boxName: 'catalogos',
+  endpoint: 'catalogs/items',
+  uploadEnabled: false, // ❌ Solo GET
+);
+```
+
+**Valor por defecto**: `uploadEnabled: false` (solo GET por defecto)
+
+#### Mejoras en Background Sync
+
+- **Inicialización automática de ConnectivityService** en background
+- **Mejor manejo de errores**: Los errores de POST ya no se silencian, se propagan correctamente
+- **Logs mejorados**: Uso de `developer.log()` para que aparezcan en logcat incluso con la app cerrada
+- **Detección automática**: Si el `boxName` contiene "asistencia" o "attendance", se habilita `uploadEnabled: true` automáticamente en background
+
+#### Mejoras en Manejo de Errores
+
+- Los errores de POST ahora se propagan correctamente en lugar de silenciarse
+- Logs detallados para cada registro que se intenta enviar
+- Contadores de éxitos/fallos en sincronización
+- Mejor información de errores en los resultados
+
+### 📚 **Documentación**
+
+- Nuevo archivo `WORKMANAGER_SETUP.md` con guía completa de configuración
+- Documentación detallada de permisos Android requeridos
+- Guía de troubleshooting para problemas comunes
+- Ejemplos completos de uso
+
+### 🔧 **Cambios Técnicos**
+
+- `OnlineOfflineManager` ahora acepta parámetro `uploadEnabled` (default: `false`)
+- `SyncService` respeta `uploadEnabled` y omite upload si es `false`
+- `BackgroundSyncService` guarda y restaura `uploadEnabled` en SharedPreferences
+- Mejora en logs de `ApiClient` usando `developer.log()` para background
+
+---
+
 ## [3.2.7] - 2025-11-28
 
 ### 🐛 **Corrección de Bug Crítico**
