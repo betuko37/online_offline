@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../config/global_config.dart';
 import '../online_offline_manager.dart';
+import '../connectivity/connectivity_service.dart';
 
 /// Log que funciona tanto en foreground como en background
 void _bgLog(String message) {
@@ -29,6 +30,7 @@ class BackgroundSyncTasks {
   static const String prefsToken = '${_prefsPrefix}token';
   static const String prefsEndpoints = '${_prefsPrefix}endpoints';
   static const String prefsBoxNames = '${_prefsPrefix}box_names';
+  static const String prefsUploadEnabled = '${_prefsPrefix}upload_enabled';
   
 }
 
@@ -107,13 +109,33 @@ Future<BackgroundSyncResult> executeBackgroundSync() async {
     }
     _bgLog('   ✓ Configuración cargada: $baseUrl');
     
-    // Leer endpoints y boxNames guardados
+    // IMPORTANTE: Inicializar ConnectivityService en background
+    _bgLog('🔌 Inicializando ConnectivityService...');
+    try {
+      await ConnectivityService.initializeGlobal();
+      // Forzar verificación de conectividad
+      await ConnectivityService.forceCheck();
+      final isOnline = ConnectivityService.globalIsOnline;
+      _bgLog('   • Estado de conectividad: $isOnline');
+      
+      if (!isOnline) {
+        _bgLog('⚠️ Sin conexión a internet detectada, pero continuando...');
+        // Continuar de todas formas, el ApiClient manejará los errores
+      }
+    } catch (e) {
+      _bgLog('⚠️ Error inicializando ConnectivityService: $e');
+      _bgLog('   Continuando de todas formas...');
+    }
+    
+    // Leer endpoints, boxNames y uploadEnabled guardados
     final endpointsJson = prefs.getStringList(BackgroundSyncTasks.prefsEndpoints) ?? [];
     final boxNamesJson = prefs.getStringList(BackgroundSyncTasks.prefsBoxNames) ?? [];
+    final uploadEnabledJson = prefs.getStringList(BackgroundSyncTasks.prefsUploadEnabled) ?? [];
     
     _bgLog('📋 Managers registrados:');
     _bgLog('   • boxNames: $boxNamesJson');
     _bgLog('   • endpoints: $endpointsJson');
+    _bgLog('   • uploadEnabled: $uploadEnabledJson');
     
     if (endpointsJson.isEmpty || boxNamesJson.isEmpty) {
       _bgLog('⚠️ No hay managers registrados para sincronizar');
@@ -137,12 +159,25 @@ Future<BackgroundSyncResult> executeBackgroundSync() async {
     for (int i = 0; i < boxNamesJson.length; i++) {
       final boxName = boxNamesJson[i];
       final endpoint = i < endpointsJson.length ? endpointsJson[i] : null;
+      // Leer uploadEnabled (default: false si no está guardado, excepto para asistencias)
+      final uploadEnabledStr = i < uploadEnabledJson.length ? uploadEnabledJson[i] : null;
+      // Por defecto false, excepto si el boxName contiene "asistencia" o "attendance"
+      bool uploadEnabled = false;
+      if (uploadEnabledStr != null) {
+        uploadEnabled = uploadEnabledStr == 'true';
+      } else {
+        // Si no está guardado, verificar si es el manager de asistencias
+        final boxNameLower = boxName.toLowerCase();
+        uploadEnabled = boxNameLower.contains('asistencia') || 
+                       boxNameLower.contains('attendance');
+      }
       
       if (endpoint != null && endpoint.isNotEmpty) {
-        _bgLog('   • Creando: $boxName -> $endpoint');
+        _bgLog('   • Creando: $boxName -> $endpoint (upload: $uploadEnabled)');
         managers.add(OnlineOfflineManager(
           boxName: boxName,
           endpoint: endpoint,
+          uploadEnabled: uploadEnabled,
         ));
       }
     }
@@ -347,8 +382,17 @@ class BackgroundSyncService {
   /// 
   /// Ejemplo:
   /// ```dart
+  /// // Manager con POST habilitado (sube y descarga)
   /// final reportes = OnlineOfflineManager(boxName: 'reportes', endpoint: '/api/reportes');
   /// await BackgroundSyncService.registerManager(reportes);
+  /// 
+  /// // Manager solo lectura (solo descarga, no sube)
+  /// final catalogos = OnlineOfflineManager(
+  ///   boxName: 'catalogos', 
+  ///   endpoint: '/api/catalogos',
+  ///   uploadEnabled: false, // Solo GET, no POST
+  /// );
+  /// await BackgroundSyncService.registerManager(catalogos);
   /// ```
   static Future<void> registerManager(OnlineOfflineManager manager) async {
     if (manager.endpoint == null) {
@@ -361,21 +405,29 @@ class BackgroundSyncService {
     // Obtener listas actuales
     final boxNames = prefs.getStringList(BackgroundSyncTasks.prefsBoxNames) ?? [];
     final endpoints = prefs.getStringList(BackgroundSyncTasks.prefsEndpoints) ?? [];
+    final uploadEnabled = prefs.getStringList(BackgroundSyncTasks.prefsUploadEnabled) ?? [];
     
     // Verificar si ya existe
     final existingIndex = boxNames.indexOf(manager.boxName);
     if (existingIndex >= 0) {
-      // Actualizar endpoint si existe
+      // Actualizar endpoint y uploadEnabled si existe
       endpoints[existingIndex] = manager.endpoint!;
+      if (existingIndex < uploadEnabled.length) {
+        uploadEnabled[existingIndex] = manager.uploadEnabled.toString();
+      } else {
+        uploadEnabled.add(manager.uploadEnabled.toString());
+      }
     } else {
       // Agregar nuevo
       boxNames.add(manager.boxName);
       endpoints.add(manager.endpoint!);
+      uploadEnabled.add(manager.uploadEnabled.toString());
     }
     
     // Guardar
     await prefs.setStringList(BackgroundSyncTasks.prefsBoxNames, boxNames);
     await prefs.setStringList(BackgroundSyncTasks.prefsEndpoints, endpoints);
+    await prefs.setStringList(BackgroundSyncTasks.prefsUploadEnabled, uploadEnabled);
     
     debugPrint('✅ [BackgroundSync] Manager registrado: ${manager.boxName}');
   }
@@ -386,6 +438,7 @@ class BackgroundSyncService {
     
     final boxNames = prefs.getStringList(BackgroundSyncTasks.prefsBoxNames) ?? [];
     final endpoints = prefs.getStringList(BackgroundSyncTasks.prefsEndpoints) ?? [];
+    final uploadEnabled = prefs.getStringList(BackgroundSyncTasks.prefsUploadEnabled) ?? [];
     
     final index = boxNames.indexOf(boxName);
     if (index >= 0) {
@@ -393,9 +446,13 @@ class BackgroundSyncService {
       if (index < endpoints.length) {
         endpoints.removeAt(index);
       }
+      if (index < uploadEnabled.length) {
+        uploadEnabled.removeAt(index);
+      }
       
       await prefs.setStringList(BackgroundSyncTasks.prefsBoxNames, boxNames);
       await prefs.setStringList(BackgroundSyncTasks.prefsEndpoints, endpoints);
+      await prefs.setStringList(BackgroundSyncTasks.prefsUploadEnabled, uploadEnabled);
       
       debugPrint('✅ [BackgroundSync] Manager desregistrado: $boxName');
     }
@@ -528,6 +585,7 @@ class BackgroundSyncService {
     await prefs.remove(BackgroundSyncTasks.prefsToken);
     await prefs.remove(BackgroundSyncTasks.prefsBoxNames);
     await prefs.remove(BackgroundSyncTasks.prefsEndpoints);
+    await prefs.remove(BackgroundSyncTasks.prefsUploadEnabled);
     
     debugPrint('✅ [BackgroundSync] Configuración limpiada');
   }

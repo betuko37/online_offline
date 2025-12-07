@@ -40,6 +40,7 @@ class OnlineOfflineManager {
   
   final String boxName;
   final String? endpoint;
+  final bool uploadEnabled; // Si es false, solo hace GET (download), no POST (upload)
   
   // Servicios modulares
   late final LocalStorage _storage;
@@ -67,9 +68,11 @@ class OnlineOfflineManager {
   /// Solo necesitas:
   /// - `boxName`: Nombre único para almacenar datos localmente
   /// - `endpoint`: URL del API (opcional si solo usas almacenamiento local)
+  /// - `uploadEnabled`: Si es false, solo hace GET (descarga), no POST (subida). Default: false
   OnlineOfflineManager({
     required this.boxName,
     this.endpoint,
+    this.uploadEnabled = false,
   }) {
     // Registrar este manager en el conjunto de activos
     _activeManagers.add(this);
@@ -220,6 +223,7 @@ class OnlineOfflineManager {
         storage: _storage,
         endpoint: endpoint,
         onSyncComplete: _notifyData,
+        uploadEnabled: uploadEnabled,
       );
       
       // Cargar datos iniciales
@@ -529,13 +533,24 @@ class OnlineOfflineManager {
         return;
       }
       
-      // Usar estado global de conectividad
+      // Verificar conectividad (pero no bloquear en background)
+      // En background, el ConnectivityService puede no estar inicializado
+      if (!ConnectivityService.isGlobalInitialized) {
+        // Si no está inicializado (posiblemente en background), intentar inicializar
+        print('⚠️ [${manager.boxName}] ConnectivityService no inicializado, intentando...');
+        try {
+          await ConnectivityService.initializeGlobal();
+          await ConnectivityService.forceCheck();
+        } catch (e) {
+          // Si falla, continuar de todas formas - el ApiClient manejará el error
+          print('⚠️ [${manager.boxName}] No se pudo verificar conectividad: $e');
+        }
+      }
+      
       if (!ConnectivityService.globalIsOnline) {
-        results[manager.boxName] = SyncResult(
-          success: false,
-          error: 'Sin conexión a internet',
-        );
-        return;
+        // En vez de bloquear, intentar de todas formas y dejar que falle naturalmente
+        print('⚠️ [${manager.boxName}] Sin conexión detectada, pero intentando sync...');
+        // Continuar - el ApiClient lanzará error si no hay conexión real
       }
       
       try {

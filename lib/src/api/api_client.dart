@@ -1,21 +1,43 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 import '../config/global_config.dart';
+
+/// Log que funciona tanto en foreground como en background
+void _log(String message) {
+  developer.log(message, name: 'ApiClient');
+  print(message);
+}
 
 /// Cliente HTTP simplificado para comunicación con el servidor
 class ApiClient {
   /// Timeout por defecto para las peticiones
-  static const Duration _defaultTimeout = Duration(seconds: 30);
+  /// Aumentado a 60 segundos para manejar mejor conexiones lentas en Android
+  static const Duration _defaultTimeout = Duration(seconds: 60);
   
   /// Timeout personalizado para este cliente (opcional)
   final Duration? customTimeout;
   
+  /// Cliente HTTP reutilizable con timeouts configurados
+  late final http.Client _client;
+  
   /// Constructor con timeout opcional
-  ApiClient({this.customTimeout});
+  ApiClient({this.customTimeout}) {
+    // Crear cliente HTTP reutilizable
+    // Nota: El paquete http de Dart no permite configurar timeouts
+    // separados para conexión y lectura, por lo que usamos .timeout()
+    // en cada petición individual
+    _client = http.Client();
+  }
   
   /// Timeout efectivo (personalizado o por defecto)
   Duration get _timeout => customTimeout ?? _defaultTimeout;
+  
+  /// Cerrar el cliente HTTP (llamar cuando ya no se necesite)
+  void close() {
+    _client.close();
+  }
 
   /// Construye headers con autenticación automática
   Map<String, String> get _headers {
@@ -70,14 +92,45 @@ class ApiClient {
   Future<ApiResponse> post(String endpoint, Map<String, dynamic> data) async {
     return _executeWithRetry(() async {
       final url = _buildFullUrl(endpoint);
+      final startTime = DateTime.now();
       
-      final response = await http.post(
-        Uri.parse(url),
-        headers: _headers,
-        body: jsonEncode(data),
-      ).timeout(_timeout);
+      // Log inicial para background
+      _log('🚀 POST $endpoint iniciando...');
       
-      return ApiResponse._fromHttpResponse(response, autoExtractData: false);
+      try {
+        // Usar el cliente HTTP con timeout más granular
+        // El timeout se aplica a la operación completa, pero el cliente
+        // maneja mejor las conexiones lentas
+        final response = await _client
+            .post(
+              Uri.parse(url),
+              headers: _headers,
+              body: jsonEncode(data),
+            )
+            .timeout(
+              _timeout,
+              onTimeout: () {
+                final elapsed = DateTime.now().difference(startTime);
+                throw TimeoutException(
+                  'Timeout: La petición tardó demasiado (${elapsed.inSeconds}s de ${_timeout.inSeconds}s)',
+                  _timeout,
+                );
+              },
+            );
+        
+        final elapsed = DateTime.now().difference(startTime);
+        _log('✅ POST $endpoint completado en ${elapsed.inMilliseconds}ms (status: ${response.statusCode})');
+        
+        return ApiResponse._fromHttpResponse(response, autoExtractData: false);
+      } catch (e) {
+        final elapsed = DateTime.now().difference(startTime);
+        if (e is TimeoutException) {
+          _log('⏱️ POST $endpoint timeout después de ${elapsed.inSeconds}s (límite: ${_timeout.inSeconds}s)');
+        } else {
+          _log('❌ POST $endpoint error después de ${elapsed.inMilliseconds}ms: $e');
+        }
+        rethrow;
+      }
     }, method: 'POST');
   }
 
@@ -87,10 +140,21 @@ class ApiClient {
     return _executeWithRetry(() async {
       final url = _buildFullUrl(endpoint);
       
-      final response = await http.get(
-        Uri.parse(url),
-        headers: _headers,
-      ).timeout(_timeout);
+      // Usar el cliente HTTP con timeout más granular
+      final response = await _client
+          .get(
+            Uri.parse(url),
+            headers: _headers,
+          )
+          .timeout(
+            _timeout,
+            onTimeout: () {
+              throw TimeoutException(
+                'Timeout: La petición tardó demasiado',
+                _timeout,
+              );
+            },
+          );
       
       return ApiResponse._fromHttpResponse(response, autoExtractData: true);
     }, method: 'GET');
@@ -108,18 +172,24 @@ class ApiClient {
       attempts++;
       try {
         return await requestFn();
-      } on TimeoutException {
+      } on TimeoutException catch (e) {
         if (attempts >= maxRetries) {
+          print('❌ Timeout definitivo en $method después de $maxRetries intentos');
           return ApiResponse._error('Timeout: La petición tardó demasiado', isTimeout: true);
         }
         print('⚠️ Timeout en $method (intento $attempts/$maxRetries). Reintentando...');
+        print('⏱️ Timeout después de ${_timeout.inSeconds} segundos');
+        print('📝 Detalle: ${e.message}');
       } catch (e) {
         // Verificar si es un error de conexión recuperable
         final errorStr = e.toString().toLowerCase();
         final isNetworkError = errorStr.contains('failed host lookup') || 
                              errorStr.contains('socketexception') ||
                              errorStr.contains('network is unreachable') ||
-                             errorStr.contains('connection refused');
+                             errorStr.contains('connection refused') ||
+                             errorStr.contains('connection timed out') ||
+                             errorStr.contains('connection reset') ||
+                             errorStr.contains('software caused connection abort');
                              
         if (!isNetworkError || attempts >= maxRetries) {
           if (isNetworkError) {

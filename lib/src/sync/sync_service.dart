@@ -14,6 +14,7 @@ class SyncService {
   final ApiClient _apiClient;
   final String? endpoint;
   final Future<void> Function()? onSyncComplete;
+  final bool uploadEnabled; // Si es false, solo hace GET (download), no POST (upload)
 
   SyncStatus _status = SyncStatus.idle;
   final _statusController = StreamController<SyncStatus>.broadcast();
@@ -26,6 +27,7 @@ class SyncService {
     required this.endpoint,
     ApiClient? apiClient,
     this.onSyncComplete,
+    this.uploadEnabled = false,
   }) : _storage = storage,
        _apiClient = apiClient ?? ApiClient();
 
@@ -44,8 +46,12 @@ class SyncService {
     _updateStatus(SyncStatus.syncing);
 
     try {
-      // 1. Subir datos pendientes
-      await _uploadPending();
+      // 1. Subir datos pendientes (solo si uploadEnabled es true)
+      if (uploadEnabled) {
+        await _uploadPending();
+      } else {
+        print('ℹ️ Upload deshabilitado para este manager, solo descargando...');
+      }
       
       // 2. Descargar datos del servidor
       await _downloadFromServer();
@@ -77,13 +83,19 @@ class SyncService {
       item['sync'] != 'true' && !item.containsKey('syncDate'));
     
     if (pending.isEmpty) {
+      print('📤 No hay registros pendientes para subir');
       return;
     }
     
     print('📤 Subiendo ${pending.length} registros pendientes...');
     
+    int successCount = 0;
+    int failCount = 0;
+    String? lastError;
+    
     for (final record in pending) {
       try {
+        print('📤 Enviando POST para registro: ${record['id'] ?? record['created_at'] ?? 'sin-id'}');
         final response = await _apiClient.post(endpoint!, record);
         
         if (response.isSuccess) {
@@ -97,16 +109,43 @@ class SyncService {
               record['sync'] = 'true';
               record['syncDate'] = DateTime.now().toIso8601String();
               await _storage.save(key, record);
+              successCount++;
+              print('✅ Registro sincronizado: ${record['id'] ?? record['created_at']}');
               break;
             }
           }
+        } else {
+          failCount++;
+          lastError = response.error ?? 'Error HTTP ${response.statusCode}';
+          print('❌ POST falló para registro: $lastError');
+          
+          // Error del cliente (4xx) - no reintentar, continuar con siguiente
+          if (response.statusCode >= 400 && response.statusCode < 500) {
+            print('⚠️ Error del cliente (${response.statusCode}), saltando registro');
+            continue;
+          }
+          // Error del servidor (5xx) o timeout - propagar error
+          throw Exception('Error en POST: $lastError');
         }
       } catch (e) {
-        // Continuar con el siguiente
+        failCount++;
+        lastError = e.toString();
+        print('❌ Error en POST para registro: $e');
+        // Propagar el error para que se detecte el fallo
+        if (failCount >= pending.length) {
+          // Si es el último y todos fallaron, propagar
+          rethrow;
+        }
+        // Si hay más registros, continuar intentando
       }
     }
     
-    print('✅ Registros pendientes subidos');
+    print('📊 Registros pendientes procesados: $successCount exitosos, $failCount fallidos');
+    
+    // Si todos fallaron, lanzar error
+    if (successCount == 0 && failCount > 0) {
+      throw Exception('Todos los POSTs fallaron ($failCount intentos). Último error: $lastError');
+    }
   }
 
   /// Descarga todos los datos del servidor
