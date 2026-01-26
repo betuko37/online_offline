@@ -22,7 +22,7 @@
 
 ```yaml
 dependencies:
-  betuko_offline_sync: ^3.3.0
+  betuko_offline_sync: ^3.3.1
 ```
 
 ```bash

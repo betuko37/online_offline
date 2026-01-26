@@ -37,6 +37,8 @@ class OnlineOfflineManager {
   static StreamSubscription<bool>? _connectivitySubscription;
   static bool _autoSyncInitialized = false;
   static bool _lastKnownOnlineState = false;
+  static bool _isHandlingReconnection = false; // 🔒 Flag para prevenir múltiples reconexiones simultáneas
+  static bool _isSyncingAll = false; // 🔒 Flag para prevenir múltiples ejecuciones simultáneas de syncAll()
   
   final String boxName;
   final String? endpoint;
@@ -137,14 +139,25 @@ class OnlineOfflineManager {
   }
   
   /// Maneja la reconexión con delay y verificación de conexión real
+  /// 
+  /// 🔒 PROTECCIÓN: Evita múltiples ejecuciones simultáneas con flag estático
   static Future<void> _handleReconnection() async {
-    final delaySeconds = GlobalConfig.reconnectDelaySeconds;
-    final verifyReal = GlobalConfig.verifyRealConnection;
+    // 🔒 Prevenir múltiples reconexiones simultáneas
+    if (_isHandlingReconnection) {
+      print('⚠️ [AutoSync] Reconexión ya en proceso, ignorando...');
+      return;
+    }
     
-    print('🔄 Auto-sync: conexión detectada, esperando ${delaySeconds}s para estabilizar...');
+    _isHandlingReconnection = true;
     
-    // Esperar a que la conexión se estabilice
-    await Future.delayed(Duration(seconds: delaySeconds));
+    try {
+      final delaySeconds = GlobalConfig.reconnectDelaySeconds;
+      final verifyReal = GlobalConfig.verifyRealConnection;
+      
+      print('🔄 Auto-sync: conexión detectada, esperando ${delaySeconds}s para estabilizar...');
+      
+      // Esperar a que la conexión se estabilice
+      await Future.delayed(Duration(seconds: delaySeconds));
     
     // Verificar conexión real si está habilitado
     if (verifyReal) {
@@ -177,6 +190,10 @@ class OnlineOfflineManager {
     
     print('🔄 Auto-sync: conexión recuperada, sincronizando...');
     await syncAll();
+    } finally {
+      // 🔒 Liberar flag después de completar (o fallar)
+      _isHandlingReconnection = false;
+    }
   }
   
   /// Detiene la sincronización automática
@@ -502,19 +519,28 @@ class OnlineOfflineManager {
   /// // { 'reportes': SyncResult(success: true), 'usuarios': SyncResult(success: false, error: '...') }
   /// ```
   static Future<Map<String, SyncResult>> syncAll() async {
-    final results = <String, SyncResult>{};
-    
-    final managers = List<OnlineOfflineManager>.from(_activeManagers);
-    
-    if (managers.isEmpty) {
-      print('⚠️ No hay managers activos para sincronizar');
-      return results;
+    // 🔒 Prevenir múltiples ejecuciones simultáneas de syncAll()
+    if (_isSyncingAll) {
+      print('⚠️ [SyncAll] Sincronización ya en proceso, ignorando...');
+      return {};
     }
     
-    print('🔄 Sincronizando ${managers.length} managers...');
+    _isSyncingAll = true;
     
-    // Sincronizar todos en paralelo
-    final syncFutures = managers.map((manager) async {
+    try {
+      final results = <String, SyncResult>{};
+      
+      final managers = List<OnlineOfflineManager>.from(_activeManagers);
+      
+      if (managers.isEmpty) {
+        print('⚠️ No hay managers activos para sincronizar');
+        return results;
+      }
+      
+      print('🔄 Sincronizando ${managers.length} managers...');
+      
+      // Sincronizar todos en paralelo
+      final syncFutures = managers.map((manager) async {
       if (manager.endpoint == null) {
         results[manager.boxName] = SyncResult(
           success: false,
@@ -565,14 +591,18 @@ class OnlineOfflineManager {
         );
         print('❌ ${manager.boxName}: error - $e');
       }
-    });
-    
-    await Future.wait(syncFutures);
-    
-    final successCount = results.values.where((r) => r.success).length;
-    print('✅ Sincronización completada: $successCount/${managers.length} exitosos');
-    
-    return results;
+      });
+      
+      await Future.wait(syncFutures);
+      
+      final successCount = results.values.where((r) => r.success).length;
+      print('✅ Sincronización completada: $successCount/${managers.length} exitosos');
+      
+      return results;
+    } finally {
+      // 🔒 Liberar flag después de completar (o fallar)
+      _isSyncingAll = false;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

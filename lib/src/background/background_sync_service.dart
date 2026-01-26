@@ -512,6 +512,9 @@ class BackgroundSyncService {
   /// Útil para programar una sincronización cuando el dispositivo
   /// recupere la conexión.
   /// 
+  /// 🔒 IMPORTANTE: Usa un nombre fijo para evitar múltiples tareas duplicadas.
+  /// Si se llama múltiples veces, reemplaza la tarea existente en lugar de crear nuevas.
+  /// 
   /// Ejemplo:
   /// ```dart
   /// // Programar sync cuando haya internet
@@ -530,9 +533,13 @@ class BackgroundSyncService {
     // Guardar configuración actual
     await saveConfig();
     
-    // Registrar tarea única
+    // 🔒 USAR NOMBRE FIJO para evitar múltiples tareas duplicadas
+    // Si se llama múltiples veces, reemplaza la tarea existente
+    const uniqueTaskName = BackgroundSyncTasks.oneTimeSync;
+    
+    // Registrar tarea única (reemplaza si ya existe)
     await Workmanager().registerOneOffTask(
-      '${BackgroundSyncTasks.oneTimeSync}_${DateTime.now().millisecondsSinceEpoch}',
+      uniqueTaskName,
       BackgroundSyncTasks.oneTimeSync,
       constraints: Constraints(
         networkType: NetworkType.connected, // Solo cuando haya internet
@@ -541,12 +548,12 @@ class BackgroundSyncService {
         requiresDeviceIdle: false,
         requiresStorageNotLow: false,
       ),
-      existingWorkPolicy: ExistingWorkPolicy.keep,
+      existingWorkPolicy: ExistingWorkPolicy.replace, // 🔒 REEMPLAZAR en lugar de mantener múltiples
       backoffPolicy: BackoffPolicy.linear,
       backoffPolicyDelay: const Duration(minutes: 1),
     );
     
-    debugPrint('✅ [BackgroundSync] Sincronización programada para cuando haya conexión');
+    debugPrint('✅ [BackgroundSync] Sincronización programada para cuando haya conexión (reemplazando tarea existente si hay)');
   }
   
   /// Detiene la sincronización periódica en background

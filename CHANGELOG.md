@@ -5,6 +5,25 @@ Todos los cambios notables de este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-01-26
+
+### 🐛 **Corrección de Bug Crítico**
+
+#### Prevención de Doble POST al Reconectar
+Se corrigió un problema donde al volver de offline a online, a veces se ejecutaban múltiples sincronizaciones simultáneas causando doble POST de los mismos datos.
+
+**Cambios implementados:**
+
+1. **Protección en `syncAll()`**: Se agregó un flag `_isSyncingAll` para prevenir múltiples ejecuciones simultáneas de `syncAll()`. Ahora si se llama desde diferentes lugares al mismo tiempo (reconexión automática, WorkManager, llamada manual), solo se ejecuta una vez.
+
+2. **Protección en `_handleReconnection()`**: Ya existía un flag `_isHandlingReconnection`, pero ahora está mejor documentado y garantiza que solo una reconexión se procese a la vez.
+
+3. **WorkManager con `ExistingWorkPolicy.replace`**: Se aseguró que `syncWhenConnected()` use un nombre fijo y reemplace tareas existentes en lugar de crear múltiples tareas duplicadas.
+
+**Resultado**: Ahora hay protección en 3 niveles para evitar ejecuciones simultáneas y garantizar que cada dato se sincronice solo una vez.
+
+---
+
 ## [3.3.0] - 2025-01-27
 
 ### ✨ **Nuevas Características**
