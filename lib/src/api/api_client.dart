@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:io' show HandshakeException, TlsException;
 import 'package:http/http.dart' as http;
 import '../config/global_config.dart';
 
@@ -8,6 +9,14 @@ import '../config/global_config.dart';
 void _log(String message) {
   developer.log(message, name: 'ApiClient');
   print(message);
+}
+
+/// Tipo de error para diagnóstico (timeout, red, TLS, otro)
+enum ApiErrorType {
+  timeout,
+  network,
+  tlsHandshake,
+  other,
 }
 
 /// Cliente HTTP simplificado para comunicación con el servidor
@@ -175,29 +184,43 @@ class ApiClient {
       } on TimeoutException catch (e) {
         if (attempts >= maxRetries) {
           print('❌ Timeout definitivo en $method después de $maxRetries intentos');
-          return ApiResponse._error('Timeout: La petición tardó demasiado', isTimeout: true);
+          return ApiResponse._error(
+            'Timeout: La petición tardó demasiado',
+            isTimeout: true,
+            errorType: ApiErrorType.timeout,
+          );
         }
         print('⚠️ Timeout en $method (intento $attempts/$maxRetries). Reintentando...');
         print('⏱️ Timeout después de ${_timeout.inSeconds} segundos');
         print('📝 Detalle: ${e.message}');
       } catch (e) {
-        // Verificar si es un error de conexión recuperable
         final errorStr = e.toString().toLowerCase();
-        final isNetworkError = errorStr.contains('failed host lookup') || 
-                             errorStr.contains('socketexception') ||
-                             errorStr.contains('network is unreachable') ||
-                             errorStr.contains('connection refused') ||
-                             errorStr.contains('connection timed out') ||
-                             errorStr.contains('connection reset') ||
-                             errorStr.contains('software caused connection abort');
-                             
+        final isTlsHandshake = e is HandshakeException ||
+            e is TlsException ||
+            errorStr.contains('handshake') ||
+            errorStr.contains('connection terminated during handshake');
+        final isNetworkError = isTlsHandshake ||
+            errorStr.contains('failed host lookup') ||
+            errorStr.contains('socketexception') ||
+            errorStr.contains('network is unreachable') ||
+            errorStr.contains('connection refused') ||
+            errorStr.contains('connection timed out') ||
+            errorStr.contains('connection reset') ||
+            errorStr.contains('software caused connection abort');
+
         if (!isNetworkError || attempts >= maxRetries) {
           if (isNetworkError) {
-             return ApiResponse._error('Sin conexión: No se puede conectar al servidor ($e)', isNetworkError: true);
+            return ApiResponse._error(
+              isTlsHandshake
+                  ? 'Error de conexión segura (TLS). Reintente cuando la red esté estable.'
+                  : 'Sin conexión: No se puede conectar al servidor ($e)',
+              isNetworkError: true,
+              errorType: isTlsHandshake ? ApiErrorType.tlsHandshake : ApiErrorType.network,
+            );
           }
-          return ApiResponse._error('Error en $method: $e');
+          return ApiResponse._error('Error en $method: $e', errorType: ApiErrorType.other);
         }
-        
+
         print('⚠️ Error de red en $method (intento $attempts/$maxRetries): $e');
         print('🔄 Reintentando en ${attempts * 2} segundos...');
       }
@@ -209,7 +232,7 @@ class ApiClient {
 }
 
 /// Respuesta del servidor
-/// Ahora con soporte para extracción automática de datos anidados
+/// Ahora con soporte para extracción automática de datos anidados y tipo de error
 class ApiResponse {
   final bool isSuccess;
   final int statusCode;
@@ -217,6 +240,7 @@ class ApiResponse {
   final String? error;
   final bool isTimeout;
   final bool isNetworkError;
+  final ApiErrorType? errorType;
 
   ApiResponse._({
     required this.isSuccess,
@@ -225,6 +249,7 @@ class ApiResponse {
     this.error,
     this.isTimeout = false,
     this.isNetworkError = false,
+    this.errorType,
   });
 
   /// Constructor desde respuesta HTTP
@@ -257,13 +282,19 @@ class ApiResponse {
   }
 
   /// Constructor para errores
-  factory ApiResponse._error(String errorMessage, {bool isTimeout = false, bool isNetworkError = false}) {
+  factory ApiResponse._error(
+    String errorMessage, {
+    bool isTimeout = false,
+    bool isNetworkError = false,
+    ApiErrorType? errorType,
+  }) {
     return ApiResponse._(
       isSuccess: false,
       statusCode: 0,
       error: errorMessage,
       isTimeout: isTimeout,
       isNetworkError: isNetworkError,
+      errorType: errorType ?? (isTimeout ? ApiErrorType.timeout : (isNetworkError ? ApiErrorType.network : ApiErrorType.other)),
     );
   }
 }

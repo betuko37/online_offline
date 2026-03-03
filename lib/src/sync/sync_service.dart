@@ -193,15 +193,18 @@ class SyncService {
     print('✅ ${records.length} registros guardados');
   }
 
-  /// Lanza error descriptivo
+  /// Lanza error descriptivo (usa errorType cuando está disponible para mensajes más claros)
   void _throwError(ApiResponse response) {
+    if (response.errorType == ApiErrorType.tlsHandshake) {
+      throw Exception('Conexión segura fallida (TLS). Compruebe la red e intente de nuevo.');
+    }
     if (response.isNetworkError) {
       throw Exception('Sin conexión a internet');
-    } else if (response.isTimeout) {
-      throw Exception('Timeout - servidor no responde');
-    } else {
-      throw Exception('Error HTTP ${response.statusCode}: ${response.error}');
     }
+    if (response.isTimeout) {
+      throw Exception('Timeout - servidor no responde');
+    }
+    throw Exception('Error HTTP ${response.statusCode}: ${response.error}');
   }
 
   void _updateStatus(SyncStatus newStatus) {
